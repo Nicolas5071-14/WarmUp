@@ -1,0 +1,441 @@
+{% extends '@MauticCore/Default/content.html.twig' %}
+
+{% block headerTitle %}
+    {{ 'Domains'|trans }}
+{% endblock %}
+
+{% block content %}
+<div class="warmup-domains-container">
+    <div class="row mb-3">
+        <div class="col-xs-6">
+            <a href="{{ path('warmup_domain_new') }}" class="btn btn-primary">
+                <i class="ri-add-line ri-fw"></i> {{ 'Add Domain'|trans }}
+            </a>
+        </div>
+        <div class="col-xs-6">
+            <div class="input-group">
+                <input type="text" id="search-input" class="form-control" placeholder="{{ 'Search domains...'|trans }}">
+                <span class="input-group-btn">
+                    <button class="btn btn-default" id="search-btn" type="button">
+                        <i class="ri-search-line ri-fw"></i>
+                    </button>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel panel-default mt-20">
+        <div class="panel-body">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped" id="domains-table">
+                    <thead>
+                        <tr>
+                            <th>{{ 'Domain Name'|trans }}</th>
+                            <th>{{ 'Status'|trans }}</th>
+                            <th>{{ 'Daily Limit'|trans }}</th>
+                            <th>{{ 'Sent Today'|trans }}</th>
+                            <th>{{ 'Verified'|trans }}</th>
+                            <th class="text-right">{{ 'Actions'|trans }}</th>
+                        </tr>
+                    </thead>
+                    <tbody id="domains-tbody">
+                        <tr>
+                            <td colspan="6" class="text-center">
+                                <i class="ri-loader-2-line ri-spin ri-2x ri-fw"></i>
+                                <p class="mt-10">{{ 'Loading domains...'|trans }}</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="text-center" id="pagination-container"></div>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript directement dans le bloc content -->
+<script>
+// Vérifier que mQuery est disponible
+if (typeof mQuery === 'undefined' && typeof jQuery !== 'undefined') {
+    var mQuery = jQuery;
+}
+
+console.log('🚀 WarmUp Domains page loaded');
+console.log('📱 mQuery available:', typeof mQuery !== 'undefined');
+
+// Test des icônes Remix
+console.log('🎨 Testing Remix Icons...');
+var testIcon = document.createElement('i');
+testIcon.className = 'ri-check-line';
+document.body.appendChild(testIcon);
+console.log('Remix Icon added to DOM');
+testIcon.remove();
+
+// Attendre que le DOM soit prêt
+if (typeof mQuery !== 'undefined') {
+    mQuery(document).ready(function() {
+        console.log('✅ DOM Ready - Starting domains loading');
+        initializeDomainsList();
+    });
+} else {
+    console.error('❌ mQuery/jQuery not found!');
+    document.getElementById('domains-tbody').innerHTML = 
+        '<tr><td colspan="6" class="text-center text-danger">' +
+        '<span class="ri-alert-line ri-3x mb-10"></span>' +
+        '<p>JavaScript error: jQuery not loaded</p>' +
+        '</td></tr>';
+}
+
+function initializeDomainsList() {
+    // Configuration
+    var config = {
+        ajaxUrl: '{{ path("warmup_domain_list_ajax") }}',
+        editUrlTemplate: '{{ path("warmup_domain_edit", {id: "__ID__"}) }}',
+        deleteUrlTemplate: '{{ path("warmup_domain_delete", {id: "__ID__"}) }}',
+        verifyUrlTemplate: '{{ path("warmup_domain_verify", {id: "__ID__"}) }}',
+        currentPage: 1,
+        currentSearch: '',
+        limit: 25
+    };
+    
+    // Fonction pour charger les domaines
+    function loadDomains(page, search) {
+        page = page || 1;
+        search = search || '';
+        
+        config.currentPage = page;
+        config.currentSearch = search;
+        
+        console.log('🔍 Loading domains - Page:', page, 'Search:', search);
+        console.log('🔗 URL:', config.ajaxUrl);
+        
+        // Afficher le loader
+        mQuery('#domains-tbody').html(
+            '<tr><td colspan="6" class="text-center">' +
+            '<span class="ri-loader-2-line ri-spin ri-2x ri-fw"></span>' +
+            '<p class="mt-10">{{ "Loading domains..."|trans }}</p>' +
+            '</td></tr>'
+        );
+        
+        // Requête AJAX
+        mQuery.ajax({
+            url: config.ajaxUrl,
+            type: 'GET',
+            dataType: 'json',
+            data: {
+                page: page,
+                search: search,
+                limit: config.limit
+            },
+            success: function(response) {
+                console.log('✅ AJAX Response received');
+                
+                if (!response || !response.success) {
+                    console.error('❌ Invalid response:', response);
+                    showError('Invalid response from server');
+                    return;
+                }
+                
+                if (!Array.isArray(response.data)) {
+                    console.error('❌ Data is not an array:', response.data);
+                    showError('Invalid data format');
+                    return;
+                }
+                
+                console.log('📊 Rendering ' + response.data.length + ' domains');
+                renderDomains(response.data);
+                
+                if (response.pagination) {
+                    renderPagination(
+                        response.pagination.page,
+                        response.pagination.limit,
+                        response.pagination.total
+                    );
+                } else {
+                    // Si pas de pagination, masquer le container
+                    mQuery('#pagination-container').html('');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('❌ AJAX Error:', status, error);
+                console.error('Response status:', xhr.status);
+                console.error('Response text:', xhr.responseText);
+                
+                var errorMsg = '{{ "Error loading domains"|trans }}';
+                try {
+                    var jsonResponse = JSON.parse(xhr.responseText);
+                    if (jsonResponse.error) {
+                        errorMsg += ': ' + jsonResponse.error;
+                    }
+                } catch (e) {
+                    errorMsg += ' (Status: ' + xhr.status + ')';
+                }
+                
+                showError(errorMsg);
+            }
+        });
+    }
+    
+    // Fonction pour afficher les domaines
+    function renderDomains(domains) {
+        console.log('📊 Rendering domains:', domains);
+        
+        var html = '';
+        
+        if (!domains || domains.length === 0) {
+            html = '<tr><td colspan="6" class="text-center text-muted">' +
+                '<span class="ri-inbox-line ri-3x mb-10 ri-fw"></span>' +
+                '<p>{{ "No domains found"|trans }}</p>' +
+                (config.currentSearch ? '<p class="text-sm">{{ "Try a different search term"|trans }}</p>' : '') +
+                '</td></tr>';
+        } else {
+            domains.forEach(function(domain) {
+                var editUrl = config.editUrlTemplate.replace('__ID__', domain.id);
+                var deleteUrl = config.deleteUrlTemplate.replace('__ID__', domain.id);
+                var verifyUrl = config.verifyUrlTemplate.replace('__ID__', domain.id);
+                
+                var percentage = domain.dailyLimit > 0 ? 
+                    Math.round((domain.totalSentToday / domain.dailyLimit) * 100) : 0;
+                
+                var statusLabel = domain.isActive ? 
+                    '<span class="label label-success"><span class="ri-checkbox-circle-line ri-fw"></span> {{ "Active"|trans }}</span>' : 
+                    '<span class="label label-default"><span class="ri-pause-circle-line ri-fw"></span> {{ "Inactive"|trans }}</span>';
+                
+                var verifiedLabel = domain.isVerified ? 
+                    '<span class="label label-success"><span class="ri-shield-check-line ri-fw"></span> {{ "Verified"|trans }}</span>' : 
+                    '<span class="label label-warning"><span class="ri-alert-line ri-fw"></span> {{ "Not Verified"|trans }}</span>';
+                
+                var progressBarClass = percentage >= 90 ? 'progress-bar-danger' : 
+                                      percentage >= 70 ? 'progress-bar-warning' : 
+                                      'progress-bar-success';
+                
+                html += '<tr>' +
+                    '<td>' +
+                        '<strong>' + escapeHtml(domain.domainName) + '</strong>' +
+                        (domain.emailPrefix ? '<br><small class="text-muted">' + escapeHtml(domain.emailPrefix) + '@' + escapeHtml(domain.domainName) + '</small>' : '') +
+                    '</td>' +
+                    '<td>' + statusLabel + '</td>' +
+                    '<td><span class="badge">' + domain.dailyLimit + '</span></td>' +
+                    '<td>' +
+                        '<strong>' + domain.totalSentToday + '</strong> / ' + domain.dailyLimit +
+                        '<div class="progress mt-5" style="height: 8px; margin-bottom: 0;">' +
+                            '<div class="progress-bar ' + progressBarClass + '" style="width: ' + percentage + '%"></div>' +
+                        '</div>' +
+                        '<small class="text-muted">' + percentage + '%</small>' +
+                    '</td>' +
+                    '<td>' + verifiedLabel + '</td>' +
+                    '<td class="text-right">' +
+                        '<div class="btn-group">' +
+                            '<a href="' + editUrl + '" class="btn btn-xs btn-default" title="{{ "Edit"|trans }}">' +
+                                '<span class="ri-edit-line ri-fw"></span> ' +
+                            '</a>' +
+                            '<button class="btn btn-xs btn-success verify-domain" ' +
+                                'data-id="' + domain.id + '" ' +
+                                'data-url="' + verifyUrl + '" ' +
+                                'title="{{ "Verify SMTP"|trans }}"' +
+                                (domain.isVerified ? ' disabled' : '') + '>' +
+                                '<span class="ri-check-line ri-fw"></span> ' +
+                            '</button>' +
+                            '<button class="btn btn-xs btn-danger delete-domain" ' +
+                                'data-id="' + domain.id + '" ' +
+                                'data-url="' + deleteUrl + '" ' +
+                                'data-name="' + escapeHtml(domain.domainName) + '" ' +
+                                'title="{{ "Delete"|trans }}">' +
+                                '<span class="ri-delete-bin-line ri-fw"></span> ' +
+                            '</button>' +
+                        '</div>' +
+                    '</td>' +
+                '</tr>';
+            });
+        }
+        
+        mQuery('#domains-tbody').html(html);
+        attachDomainEvents();
+    }
+    
+    // Fonction pour échapper le HTML
+    function escapeHtml(text) {
+        if (!text) return '';
+        return mQuery('<div>').text(text).html();
+    }
+    
+    // Fonction pour afficher les erreurs
+    function showError(message) {
+        mQuery('#domains-tbody').html(
+            '<tr><td colspan="6" class="text-center text-danger">' +
+            '<span class="ri-alert-line ri-3x mb-10 ri-fw"></span>' +
+            '<p><strong>' + message + '</strong></p>' +
+            '<button class="btn btn-sm btn-default" onclick="window.location.reload()">' +
+            '<span class="ri-refresh-line ri-fw"></span> {{ "Reload page"|trans }}' +
+            '</button>' +
+            '</td></tr>'
+        );
+    }
+    
+    // Fonction pour la pagination
+    function renderPagination(currentPage, limit, total) {
+        var totalPages = Math.ceil(total / limit);
+        var html = '';
+        
+        if (totalPages > 1) {
+            html = '<ul class="pagination pagination-sm">';
+            
+            // Bouton précédent
+            if (currentPage > 1) {
+                html += '<li><a href="#" class="page-link" data-page="' + (currentPage - 1) + '">' +
+                    '<span class="ri-arrow-left-s-line ri-fw"></span></a></li>';
+            } else {
+                html += '<li class="disabled"><span><span class="ri-arrow-left-s-line ri-fw"></span></span></li>';
+            }
+            
+            // Pages
+            var startPage = Math.max(1, currentPage - 2);
+            var endPage = Math.min(totalPages, currentPage + 2);
+            
+            if (startPage > 1) {
+                html += '<li><a href="#" class="page-link" data-page="1">1</a></li>';
+                if (startPage > 2) {
+                    html += '<li class="disabled"><span>...</span></li>';
+                }
+            }
+            
+            for (var i = startPage; i <= endPage; i++) {
+                if (i === currentPage) {
+                    html += '<li class="active"><span>' + i + '</span></li>';
+                } else {
+                    html += '<li><a href="#" class="page-link" data-page="' + i + '">' + i + '</a></li>';
+                }
+            }
+            
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    html += '<li class="disabled"><span>...</span></li>';
+                }
+                html += '<li><a href="#" class="page-link" data-page="' + totalPages + '">' + totalPages + '</a></li>';
+            }
+            
+            // Bouton suivant
+            if (currentPage < totalPages) {
+                html += '<li><a href="#" class="page-link" data-page="' + (currentPage + 1) + '">' +
+                    '<span class="ri-arrow-right-s-line ri-fw"></span></a></li>';
+            } else {
+                html += '<li class="disabled"><span><span class="ri-arrow-right-s-line ri-fw"></span></span></li>';
+            }
+            
+            html += '</ul>';
+            
+            // Info pagination
+            var start = ((currentPage - 1) * limit) + 1;
+            var end = Math.min(currentPage * limit, total);
+            html += '<p class="text-muted text-center mt-10">' +
+                '{{ "Showing"|trans }} ' + start + ' - ' + end + ' {{ "of"|trans }} ' + total + ' {{ "domains"|trans }}' +
+                '</p>';
+        }
+        
+        mQuery('#pagination-container').html(html);
+        
+        // Événements de pagination
+        mQuery('.page-link').off('click').on('click', function(e) {
+            e.preventDefault();
+            var page = mQuery(this).data('page');
+            if (page) {
+                loadDomains(page, config.currentSearch);
+            }
+        });
+    }
+    
+    // Attacher les événements aux boutons
+    function attachDomainEvents() {
+        // Supprimer un domaine
+        mQuery('.delete-domain').off('click').on('click', function() {
+            var domainId = mQuery(this).data('id');
+            var domainName = mQuery(this).data('name');
+            var deleteUrl = mQuery(this).data('url');
+            
+            if (confirm('{{ "Are you sure you want to delete this domain?"|trans }}\n\n' + domainName)) {
+                deleteDomain(domainId, deleteUrl);
+            }
+        });
+        
+        // Vérifier un domaine
+        mQuery('.verify-domain').off('click').on('click', function() {
+            var domainId = mQuery(this).data('id');
+            var verifyUrl = mQuery(this).data('url');
+            var button = mQuery(this);
+            verifyDomain(domainId, verifyUrl, button);
+        });
+    }
+    
+    // Supprimer un domaine
+    function deleteDomain(domainId, deleteUrl) {
+        console.log('🗑️ Deleting domain:', domainId);
+        
+        mQuery.ajax({
+            url: deleteUrl,
+            type: 'POST',
+            dataType: 'json',
+            success: function(response) {
+                console.log('✅ Delete response:', response);
+                if (response.success) {
+                    Mautic.showNotification('{{ "Domain deleted successfully"|trans }}', 'success');
+                    loadDomains(config.currentPage, config.currentSearch);
+                } else {
+                    Mautic.showNotification(response.error || '{{ "Error deleting domain"|trans }}', 'error');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('❌ Delete error:', error);
+                Mautic.showNotification('{{ "Error deleting domain"|trans }}', 'error');
+            }
+        });
+    }
+    
+    // Vérifier un domaine
+    function verifyDomain(domainId, verifyUrl, button) {
+        console.log('✅ Verifying domain:', domainId);
+        
+        button.prop('disabled', true).html('<span class="ri-loader-2-line ri-spin ri-fw"></span>');
+        
+        mQuery.ajax({
+            url: verifyUrl,
+            type: 'POST',
+            dataType: 'json',
+            success: function(response) {
+                console.log('✅ Verify response:', response);
+                if (response.success) {
+                    Mautic.showNotification('{{ "SMTP verification successful"|trans }}', 'success');
+                    loadDomains(config.currentPage, config.currentSearch);
+                } else {
+                    Mautic.showNotification(response.message || '{{ "SMTP verification failed"|trans }}', 'error');
+                    button.prop('disabled', false).html('<span class="ri-check-line ri-fw"></span>');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('❌ Verify error:', error);
+                Mautic.showNotification('{{ "SMTP verification failed"|trans }}', 'error');
+                button.prop('disabled', false).html('<span class="ri-check-line ri-fw"></span>');
+            }
+        });
+    }
+    
+    // Événements de recherche
+    mQuery('#search-btn').off('click').on('click', function() {
+        var search = mQuery('#search-input').val();
+        loadDomains(1, search);
+    });
+    
+    mQuery('#search-input').off('keypress').on('keypress', function(e) {
+        if (e.which === 13) {
+            e.preventDefault();
+            var search = mQuery(this).val();
+            loadDomains(1, search);
+        }
+    });
+    
+    // Charger les domaines au démarrage
+    console.log('🚀 Initializing domains list...');
+    loadDomains(1, '');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,336 @@
+{% extends '@MauticCore/Default/content.html.twig' %}
+
+{% block headerTitle %}
+    {{ 'Email Warmup Campaigns'|trans }}
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <div class="row">
+                <div class="col-sm-6">
+                    <h3 class="panel-title">
+                        <i class="fa fa-rocket"></i> Campaigns
+                    </h3>
+                </div>
+                <div class="col-sm-6 text-right">
+                    <a href="{{ path('warmup_campaign_new') }}" class="btn btn-primary">
+                        <i class="fa fa-plus"></i> New Campaign
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="panel-body">
+            <div class="table-responsive">
+                <table id="campaignsTable" class="table table-striped table-bordered" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Status</th>
+                            <th>Contacts</th>
+                            <th>Sent</th>
+                            <th>Start Date</th>
+                            <th>Progress</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be loaded via AJAX -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.status-active { 
+    background-color: #5cb85c; 
+    color: white; 
+}
+
+.status-paused { 
+    background-color: #f0ad4e; 
+    color: white; 
+}
+
+.status-draft { 
+    background-color: #999; 
+    color: white; 
+}
+
+.status-completed { 
+    background-color: #5bc0de; 
+    color: white; 
+}
+
+.progress {
+    margin-bottom: 0;
+    height: 22px;
+}
+
+.progress-bar {
+    line-height: 22px;
+    font-size: 11px;
+}
+
+#campaignsTable {
+    font-size: 13px;
+}
+
+#campaignsTable td {
+    vertical-align: middle !important;
+}
+
+.dataTables_wrapper .dataTables_processing {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 200px;
+    margin-left: -100px;
+    margin-top: -26px;
+    text-align: center;
+    padding: 1em 0;
+    background: white;
+    border: 1px solid #ddd;
+}
+</style>
+{% endblock %}
+
+{% block javascripts %}
+{{ parent() }}
+
+<!-- DataTables CSS & JS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap.min.css">
+<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap.min.js"></script>
+
+<script>
+(function() {
+    'use strict';
+    
+    // Utiliser mQuery (alias jQuery de Mautic)
+    var $ = mQuery || jQuery;
+    
+    $(document).ready(function() {
+        console.log('Initializing campaigns DataTable...');
+        
+        // Initialiser DataTable
+        var table = $('#campaignsTable').DataTable({
+            processing: true,
+            serverSide: true,
+            ajax: {
+                url: '{{ path("warmup_campaign_ajax_list") }}',
+                type: 'GET',
+                error: function(xhr, error, code) {
+                    console.error('DataTables AJAX error:', error, code);
+                    console.error('Response:', xhr.responseText);
+                    alert('Error loading campaigns: ' + error);
+                }
+            },
+            columns: [
+                { 
+                    data: 'id',
+                    width: '50px'
+                },
+                { 
+                    data: 'campaignName',
+                    render: function(data, type, row) {
+                        return '<strong>' + data + '</strong>';
+                    }
+                },
+                { 
+                    data: 'status',
+                    width: '100px',
+                    render: function(data, type, row) {
+                        return '<span class="status-badge status-' + row.status + '">' + row.statusLabel + '</span>';
+                    }
+                },
+                { 
+                    data: 'totalContacts',
+                    width: '80px',
+                    className: 'text-center'
+                },
+                { 
+                    data: 'emailsSent',
+                    width: '80px',
+                    className: 'text-center'
+                },
+                { 
+                    data: 'startDate',
+                    width: '130px',
+                    className: 'text-center'
+                },
+                { 
+                    data: 'progress',
+                    width: '150px',
+                    render: function(data, type, row) {
+                        var percentage = parseInt(data) || 0;
+                        var barClass = 'progress-bar-success';
+                        
+                        if (percentage < 30) {
+                            barClass = 'progress-bar-danger';
+                        } else if (percentage < 70) {
+                            barClass = 'progress-bar-warning';
+                        }
+                        
+                        return '<div class="progress">' +
+                               '<div class="progress-bar ' + barClass + '" role="progressbar" ' +
+                               'style="width: ' + percentage + '%;" aria-valuenow="' + percentage + '" ' +
+                               'aria-valuemin="0" aria-valuemax="100">' +
+                               percentage + '%' +
+                               '</div></div>';
+                    }
+                },
+                { 
+                    data: 'actions',
+                    width: '120px',
+                    orderable: false,
+                    className: 'text-center',
+                    render: function(data, type, row) {
+                        return data;
+                    }
+                }
+            ],
+            order: [[0, 'desc']],
+            pageLength: 25,
+            lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+            language: {
+                processing: "Loading campaigns...",
+                emptyTable: "No campaigns found",
+                zeroRecords: "No matching campaigns found",
+                info: "Showing _START_ to _END_ of _TOTAL_ campaigns",
+                infoEmpty: "Showing 0 to 0 of 0 campaigns",
+                infoFiltered: "(filtered from _MAX_ total campaigns)",
+                search: "Search:",
+                lengthMenu: "Show _MENU_ campaigns",
+                paginate: {
+                    first: "First",
+                    last: "Last",
+                    next: "Next",
+                    previous: "Previous"
+                }
+            },
+            drawCallback: function(settings) {
+                console.log('DataTable drawn with', settings.json ? settings.json.data.length : 0, 'rows');
+            }
+        });
+        
+        // Event handlers pour les boutons d'action
+        $('#campaignsTable').on('click', '.start-campaign', function(e) {
+            e.preventDefault();
+            var campaignId = $(this).data('id');
+            startCampaign(campaignId);
+        });
+        
+        $('#campaignsTable').on('click', '.pause-campaign', function(e) {
+            e.preventDefault();
+            var campaignId = $(this).data('id');
+            pauseCampaign(campaignId);
+        });
+        
+        $('#campaignsTable').on('click', '.resume-campaign', function(e) {
+            e.preventDefault();
+            var campaignId = $(this).data('id');
+            resumeCampaign(campaignId);
+        });
+        
+        // Fonctions AJAX pour les actions
+        function startCampaign(id) {
+            if (!confirm('Are you sure you want to start this campaign?')) {
+                return;
+            }
+            
+            executeAction(
+                '{{ path("warmup_campaign_start", {"id": "__ID__"}) }}'.replace('__ID__', id),
+                'Campaign started successfully!',
+                'Error starting campaign'
+            );
+        }
+        
+        function pauseCampaign(id) {
+            if (!confirm('Are you sure you want to pause this campaign?')) {
+                return;
+            }
+            
+            executeAction(
+                '{{ path("warmup_campaign_pause", {"id": "__ID__"}) }}'.replace('__ID__', id),
+                'Campaign paused successfully!',
+                'Error pausing campaign'
+            );
+        }
+        
+        function resumeCampaign(id) {
+            if (!confirm('Are you sure you want to resume this campaign?')) {
+                return;
+            }
+            
+            executeAction(
+                '{{ path("warmup_campaign_resume", {"id": "__ID__"}) }}'.replace('__ID__', id),
+                'Campaign resumed successfully!',
+                'Error resuming campaign'
+            );
+        }
+        
+        function executeAction(url, successMessage, errorMessage) {
+            $.ajax({
+                url: url,
+                type: 'POST',
+                dataType: 'json',
+                beforeSend: function() {
+                    // Optionnel: afficher un loader
+                },
+                success: function(response) {
+                    if (response.success) {
+                        showNotification(successMessage, 'success');
+                        table.ajax.reload(null, false); // Recharger sans revenir à la page 1
+                    } else {
+                        showNotification(response.message || errorMessage, 'error');
+                    }
+                },
+                error: function(xhr) {
+                    console.error('AJAX error:', xhr.responseText);
+                    showNotification(errorMessage + ': ' + xhr.statusText, 'error');
+                }
+            });
+        }
+        
+        function showNotification(message, type) {
+            var alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+            var icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle';
+            
+            var notification = $(
+                '<div class="alert ' + alertClass + ' alert-dismissible" role="alert" ' +
+                'style="position: fixed; top: 70px; right: 20px; z-index: 9999; min-width: 300px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">' +
+                '<button type="button" class="close" data-dismiss="alert" aria-label="Close">' +
+                '<span aria-hidden="true">&times;</span>' +
+                '</button>' +
+                '<i class="fa ' + icon + '"></i> ' + message +
+                '</div>'
+            );
+            
+            $('body').append(notification);
+            
+            // Auto-hide après 5 secondes
+            setTimeout(function() {
+                notification.fadeOut(function() {
+                    $(this).remove();
+                });
+            }, 5000);
+        }
+    });
+})();
+</script>
+{% endblock %}

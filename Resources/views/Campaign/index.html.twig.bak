@@ -1,0 +1,650 @@
+{% extends '@MauticCore/Default/content.html.twig' %}
+
+{% block headerTitle %}
+    {{ 'warmup.campaigns'|trans }}
+{% endblock %}
+
+{% block actions %}
+    <div class="page-actions">
+        <div class="btn-group" role="group">
+            <a href="{{ path('warmup_campaign_new') }}" class="btn btn-primary">
+                <i class="ri-add-line"></i>
+                <span>{{ 'mautic.core.new'|trans }}</span>
+            </a>
+            <button type="button" class="btn btn-default" onclick="Mautic.loadCampaigns();">
+                <i class="ri-refresh-line"></i>
+            </button>
+        </div>
+    </div>
+{% endblock %}
+
+{% block content %}
+<div class="panel panel-default bdr-t-wdh-0 mb-0">
+    <div class="panel-body">
+        <!-- Filters -->
+        <div class="row mb-md">
+            <div class="col-sm-12">
+                <div class="filters-toolbar">
+                    <div class="filter-search">
+                        <input type="text" 
+                               id="campaign-search" 
+                               class="form-control" 
+                               placeholder="{{ 'mautic.core.search.placeholder'|trans }}"
+                               onkeyup="Mautic.searchCampaigns(this.value)"
+                               autocomplete="off">
+                    </div>
+                    <div class="filter-status ml-md">
+                        <select id="campaign-status-filter" class="form-control" onchange="Mautic.filterByStatus(this.value)">
+                            <option value="">{{ 'mautic.core.filter.all'|trans }}</option>
+                            <option value="draft">{{ 'warmup.campaign.status.draft'|trans }}</option>
+                            <option value="active">{{ 'warmup.campaign.status.active'|trans }}</option>
+                            <option value="paused">{{ 'warmup.campaign.status.paused'|trans }}</option>
+                            <option value="completed">{{ 'warmup.campaign.status.completed'|trans }}</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Cards -->
+        <div class="row mb-lg" id="campaign-stats">
+            <!-- Stats will be loaded via AJAX -->
+        </div>
+
+        <!-- Campaigns Table -->
+        <div class="table-responsive">
+            <table class="table table-hover" id="campaigns-table">
+                <thead>
+                    <tr>
+                        <th class="col-name">{{ 'mautic.core.name'|trans }}</th>
+                        <th class="col-status">{{ 'mautic.core.status'|trans }}</th>
+                        <th class="col-contacts">{{ 'warmup.campaign.contacts'|trans }}</th>
+                        <th class="col-sent">{{ 'warmup.campaign.emails_sent'|trans }}</th>
+                        <th class="col-progress">{{ 'warmup.campaign.progress'|trans }}</th>
+                        <th class="col-rates">{{ 'warmup.campaign.rates'|trans }}</th>
+                        <th class="col-dates">{{ 'warmup.campaign.start_date'|trans }}</th>
+                        <th class="col-actions">{{ 'mautic.core.actions'|trans }}</th>
+                    </tr>
+                </thead>
+                <tbody id="campaigns-list">
+                    <!-- Campaigns will be loaded via AJAX -->
+                    <tr id="loading-row">
+                        <td colspan="8" class="text-center">
+                            <i class="fa fa-spinner fa-spin"></i>
+                            {{ 'mautic.core.loading'|trans }}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="panel-footer">
+            <div class="row">
+                <div class="col-sm-6">
+                    <div id="campaign-pagination-info" class="pagination-info">
+                        <!-- Pagination info will be loaded via AJAX -->
+                    </div>
+                </div>
+                <div class="col-sm-6 text-right">
+                    <div id="campaign-pagination" class="pagination">
+                        <!-- Pagination will be loaded via AJAX -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block contentScripts %}
+<script>
+// Mautic namespace for campaign functions
+var Mautic = Mautic || {};
+Mautic.Campaign = Mautic.Campaign || {};
+
+// Current page state
+Mautic.Campaign.currentPage = 1;
+Mautic.Campaign.currentLimit = 25;
+Mautic.Campaign.currentSearch = '';
+Mautic.Campaign.currentStatus = '';
+Mautic.Campaign.isLoading = false;
+
+// Initialize on document ready
+document.addEventListener('DOMContentLoaded', function() {
+    Mautic.loadCampaigns();
+});
+
+// Load campaigns via AJAX
+Mautic.loadCampaigns = function(page) {
+    if (Mautic.Campaign.isLoading) return;
+    
+    Mautic.Campaign.isLoading = true;
+    Mautic.Campaign.currentPage = page || Mautic.Campaign.currentPage;
+    
+    // Show loading
+    document.getElementById('campaigns-list').innerHTML = `
+        <tr id="loading-row">
+            <td colspan="8" class="text-center">
+                <i class="fa fa-spinner fa-spin"></i> ${Mautic.translate('mautic.core.loading')}
+            </td>
+        </tr>
+    `;
+    
+    // Build URL with parameters
+    var url = new URL('{{ path("warmup_campaign_ajax_list") }}', window.location.origin);
+    url.searchParams.append('page', Mautic.Campaign.currentPage);
+    url.searchParams.append('limit', Mautic.Campaign.currentLimit);
+    if (Mautic.Campaign.currentSearch) {
+        url.searchParams.append('search', Mautic.Campaign.currentSearch);
+    }
+    if (Mautic.Campaign.currentStatus) {
+        url.searchParams.append('status', Mautic.Campaign.currentStatus);
+    }
+    
+    // Make AJAX request
+    fetch(url, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok: ' + response.statusText);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            Mautic.renderCampaigns(data);
+            Mautic.renderStats(data.stats);
+            Mautic.renderPagination(data);
+        } else {
+            Mautic.showError(data.message || 'Failed to load campaigns');
+        }
+        Mautic.Campaign.isLoading = false;
+    })
+    .catch(error => {
+        console.error('Error loading campaigns:', error);
+        Mautic.showError('Failed to load campaigns. Please try again.');
+        Mautic.Campaign.isLoading = false;
+    });
+};
+
+// Render campaigns list
+Mautic.renderCampaigns = function(data) {
+    var campaigns = data.data || [];
+    var html = '';
+    
+    if (campaigns.length === 0) {
+        html = `
+            <tr>
+                <td colspan="8" class="text-center">
+                    <div class="alert alert-info">
+                        ${Mautic.translate('mautic.core.noresults')}
+                    </div>
+                </td>
+            </tr>
+        `;
+    } else {
+        campaigns.forEach(function(campaign) {
+            // Progress bar
+            var progressBar = `
+                <div class="progress" style="height: 20px;">
+                    <div class="progress-bar progress-bar-success" 
+                         role="progressbar" 
+                         style="width: ${campaign.progress || 0}%">
+                        ${campaign.progress || 0}%
+                    </div>
+                </div>
+            `;
+            
+            // Status badge
+            var statusBadge = '';
+            var statusClass = '';
+            switch(campaign.status) {
+                case 'active':
+                    statusClass = 'label-success';
+                    break;
+                case 'draft':
+                    statusClass = 'label-default';
+                    break;
+                case 'paused':
+                    statusClass = 'label-warning';
+                    break;
+                case 'completed':
+                    statusClass = 'label-info';
+                    break;
+                case 'failed':
+                    statusClass = 'label-danger';
+                    break;
+                default:
+                    statusClass = 'label-default';
+            }
+            statusBadge = `<span class="label ${statusClass}">${campaign.statusLabel || campaign.status}</span>`;
+            
+            // Action buttons
+            var actions = `
+                <div class="dropdown">
+                    <button class="btn btn-default btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+                        ${Mautic.translate('mautic.core.actions')}
+                        <span class="caret"></span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-right">
+                        <li>
+                            <a href="${Mautic.generateUrl('warmup_campaign_edit', {id: campaign.id})}">
+                                <i class="ri-edit-line"></i> ${Mautic.translate('mautic.core.edit')}
+                            </a>
+                        </li>
+                        ${campaign.status === 'draft' ? `
+                        <li>
+                            <a href="#" onclick="Mautic.startCampaign(${campaign.id}); return false;">
+                                <i class="ri-play-line"></i> ${Mautic.translate('warmup.campaign.start')}
+                            </a>
+                        </li>
+                        ` : ''}
+                        ${campaign.status === 'active' ? `
+                        <li>
+                            <a href="#" onclick="Mautic.pauseCampaign(${campaign.id}); return false;">
+                                <i class="ri-pause-line"></i> ${Mautic.translate('warmup.campaign.pause')}
+                            </a>
+                        </li>
+                        ` : ''}
+                        ${campaign.status === 'paused' ? `
+                        <li>
+                            <a href="#" onclick="Mautic.resumeCampaign(${campaign.id}); return false;">
+                                <i class="ri-play-line"></i> ${Mautic.translate('warmup.campaign.resume')}
+                            </a>
+                        </li>
+                        ` : ''}
+                        <li class="divider"></li>
+                        <li>
+                            <a href="${Mautic.generateUrl('warmup_campaign_contacts', {id: campaign.id})}">
+                                <i class="ri-group-line"></i> ${Mautic.translate('warmup.campaign.contacts')}
+                            </a>
+                        </li>
+                        <li>
+                            <a href="${Mautic.generateUrl('warmup_campaign_sequences', {id: campaign.id})}">
+                                <i class="ri-list-ordered"></i> ${Mautic.translate('warmup.campaign.sequences')}
+                            </a>
+                        </li>
+                        <li>
+                            <a href="${Mautic.generateUrl('warmup_campaign_progress', {id: campaign.id})}">
+                                <i class="ri-bar-chart-line"></i> ${Mautic.translate('warmup.campaign.progress')}
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            `;
+            
+            // Rates display
+            var rates = `
+                <small class="text-muted">
+                    <div>${Mautic.translate('warmup.campaign.delivery')}: <strong>${(campaign.deliveryRate || 0).toFixed(1)}%</strong></div>
+                    <div>${Mautic.translate('warmup.campaign.open')}: <strong>${(campaign.openRate || 0).toFixed(1)}%</strong></div>
+                    <div>${Mautic.translate('warmup.campaign.click')}: <strong>${(campaign.clickRate || 0).toFixed(1)}%</strong></div>
+                </small>
+            `;
+            
+            html += `
+                <tr>
+                    <td>
+                        <div class="media">
+                            <div class="media-body">
+                                <h5 class="media-heading">
+                                    <a href="${Mautic.generateUrl('warmup_campaign_edit', {id: campaign.id})}">
+                                        ${campaign.campaignName || 'Unnamed Campaign'}
+                                    </a>
+                                </h5>
+                                <small class="text-muted">${campaign.description || ''}</small>
+                            </div>
+                        </div>
+                    </td>
+                    <td>${statusBadge}</td>
+                    <td>${campaign.totalContacts || 0}</td>
+                    <td>${campaign.emailsSent || 0}</td>
+                    <td width="150">${progressBar}</td>
+                    <td width="120">${rates}</td>
+                    <td>
+                        ${campaign.startDate ? new Date(campaign.startDate).toLocaleDateString() : '-'}
+                        <br>
+                        <small class="text-muted">
+                            ${campaign.createdAt ? new Date(campaign.createdAt).toLocaleDateString() : ''}
+                        </small>
+                    </td>
+                    <td>${actions}</td>
+                </tr>
+            `;
+        });
+    }
+    
+    document.getElementById('campaigns-list').innerHTML = html;
+};
+
+// Render statistics cards
+Mautic.renderStats = function(stats) {
+    if (!stats) return;
+    
+    var html = `
+        <div class="col-md-3">
+            <div class="panel panel-default">
+                <div class="panel-body text-center">
+                    <h2 class="text-primary">${stats.total_campaigns || 0}</h2>
+                    <p class="text-muted">${Mautic.translate('warmup.campaign.total')}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="panel panel-default">
+                <div class="panel-body text-center">
+                    <h2 class="text-success">${stats.active_campaigns || 0}</h2>
+                    <p class="text-muted">${Mautic.translate('warmup.campaign.active')}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="panel panel-default">
+                <div class="panel-body text-center">
+                    <h2 class="text-warning">${stats.draft_campaigns || 0}</h2>
+                    <p class="text-muted">${Mautic.translate('warmup.campaign.draft')}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="panel panel-default">
+                <div class="panel-body text-center">
+                    <h2 class="text-info">${stats.total_emails_sent || 0}</h2>
+                    <p class="text-muted">${Mautic.translate('warmup.campaign.total_emails')}</p>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('campaign-stats').innerHTML = html;
+};
+
+// Render pagination
+Mautic.renderPagination = function(data) {
+    var total = data.total || 0;
+    var page = data.page || 1;
+    var limit = data.limit || 25;
+    var totalPages = Math.ceil(total / limit);
+    
+    // Pagination info
+    var start = ((page - 1) * limit) + 1;
+    var end = Math.min(page * limit, total);
+    var infoHtml = `${Mautic.translate('mautic.core.pagination.info', {
+        '%start%': start,
+        '%end%': end,
+        '%total%': total
+    })}`;
+    
+    document.getElementById('campaign-pagination-info').innerHTML = infoHtml;
+    
+    // Pagination buttons
+    var paginationHtml = '<ul class="pagination pagination-sm">';
+    
+    // Previous button
+    if (page > 1) {
+        paginationHtml += `
+            <li>
+                <a href="#" onclick="Mautic.loadCampaigns(${page - 1}); return false;">
+                    <i class="fa fa-angle-left"></i>
+                </a>
+            </li>
+        `;
+    } else {
+        paginationHtml += '<li class="disabled"><span><i class="fa fa-angle-left"></i></span></li>';
+    }
+    
+    // Page numbers
+    for (var i = 1; i <= totalPages; i++) {
+        if (i === page) {
+            paginationHtml += `<li class="active"><span>${i}</span></li>`;
+        } else if (i >= page - 2 && i <= page + 2) {
+            paginationHtml += `
+                <li>
+                    <a href="#" onclick="Mautic.loadCampaigns(${i}); return false;">${i}</a>
+                </li>
+            `;
+        } else if (i === 1 || i === totalPages) {
+            paginationHtml += `
+                <li>
+                    <a href="#" onclick="Mautic.loadCampaigns(${i}); return false;">${i}</a>
+                </li>
+            `;
+        } else if (i === page - 3 || i === page + 3) {
+            paginationHtml += '<li class="disabled"><span>...</span></li>';
+        }
+    }
+    
+    // Next button
+    if (page < totalPages) {
+        paginationHtml += `
+            <li>
+                <a href="#" onclick="Mautic.loadCampaigns(${page + 1}); return false;">
+                    <i class="fa fa-angle-right"></i>
+                </a>
+            </li>
+        `;
+    } else {
+        paginationHtml += '<li class="disabled"><span><i class="fa fa-angle-right"></i></span></li>';
+    }
+    
+    paginationHtml += '</ul>';
+    document.getElementById('campaign-pagination').innerHTML = paginationHtml;
+};
+
+// Search campaigns
+Mautic.searchCampaigns = function(searchTerm) {
+    clearTimeout(Mautic.Campaign.searchTimeout);
+    Mautic.Campaign.searchTimeout = setTimeout(function() {
+        Mautic.Campaign.currentSearch = searchTerm;
+        Mautic.Campaign.currentPage = 1;
+        Mautic.loadCampaigns();
+    }, 300);
+};
+
+// Filter by status
+Mautic.filterByStatus = function(status) {
+    Mautic.Campaign.currentStatus = status;
+    Mautic.Campaign.currentPage = 1;
+    Mautic.loadCampaigns();
+};
+
+// Campaign actions
+Mautic.startCampaign = function(campaignId) {
+    if (!confirm(Mautic.translate('warmup.campaign.confirm_start'))) return;
+    
+    fetch(Mautic.generateUrl('warmup_campaign_start', {id: campaignId}), {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            Mautic.showNotification(data.message, 'success');
+            Mautic.loadCampaigns();
+        } else {
+            Mautic.showError(data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error starting campaign:', error);
+        Mautic.showError('Failed to start campaign');
+    });
+};
+
+Mautic.pauseCampaign = function(campaignId) {
+    if (!confirm(Mautic.translate('warmup.campaign.confirm_pause'))) return;
+    
+    fetch(Mautic.generateUrl('warmup_campaign_pause', {id: campaignId}), {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            Mautic.showNotification(data.message, 'success');
+            Mautic.loadCampaigns();
+        } else {
+            Mautic.showError(data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error pausing campaign:', error);
+        Mautic.showError('Failed to pause campaign');
+    });
+};
+
+Mautic.resumeCampaign = function(campaignId) {
+    if (!confirm(Mautic.translate('warmup.campaign.confirm_resume'))) return;
+    
+    fetch(Mautic.generateUrl('warmup_campaign_resume', {id: campaignId}), {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            Mautic.showNotification(data.message, 'success');
+            Mautic.loadCampaigns();
+        } else {
+            Mautic.showError(data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error resuming campaign:', error);
+        Mautic.showError('Failed to resume campaign');
+    });
+};
+
+// Utility functions
+Mautic.generateUrl = function(route, params) {
+    var url = '{{ path("' + route + '") }}';
+    if (params) {
+        Object.keys(params).forEach(function(key) {
+            url = url.replace('{' + key + '}', params[key]);
+        });
+    }
+    return url;
+};
+
+Mautic.translate = function(key, params) {
+    // This would be replaced with your translation system
+    var translations = {
+        'mautic.core.actions': 'Actions',
+        'mautic.core.edit': 'Edit',
+        'mautic.core.loading': 'Loading...',
+        'mautic.core.noresults': 'No results found',
+        'mautic.core.search.placeholder': 'Search...',
+        'mautic.core.filter.all': 'All',
+        'mautic.core.name': 'Name',
+        'mautic.core.status': 'Status',
+        'mautic.core.new': 'New',
+        'mautic.core.pagination.info': 'Showing %start% to %end% of %total%',
+        'warmup.campaigns': 'Campaigns',
+        'warmup.campaign.contacts': 'Contacts',
+        'warmup.campaign.emails_sent': 'Emails Sent',
+        'warmup.campaign.progress': 'Progress',
+        'warmup.campaign.rates': 'Rates',
+        'warmup.campaign.start_date': 'Start Date',
+        'warmup.campaign.status.draft': 'Draft',
+        'warmup.campaign.status.active': 'Active',
+        'warmup.campaign.status.paused': 'Paused',
+        'warmup.campaign.status.completed': 'Completed',
+        'warmup.campaign.total': 'Total Campaigns',
+        'warmup.campaign.active': 'Active',
+        'warmup.campaign.draft': 'Draft',
+        'warmup.campaign.total_emails': 'Total Emails',
+        'warmup.campaign.start': 'Start',
+        'warmup.campaign.pause': 'Pause',
+        'warmup.campaign.resume': 'Resume',
+        'warmup.campaign.delivery': 'Delivery',
+        'warmup.campaign.open': 'Open',
+        'warmup.campaign.click': 'Click',
+        'warmup.campaign.confirm_start': 'Are you sure you want to start this campaign?',
+        'warmup.campaign.confirm_pause': 'Are you sure you want to pause this campaign?',
+        'warmup.campaign.confirm_resume': 'Are you sure you want to resume this campaign?'
+    };
+    
+    var text = translations[key] || key;
+    if (params) {
+        Object.keys(params).forEach(function(paramKey) {
+            text = text.replace('%' + paramKey + '%', params[paramKey]);
+        });
+    }
+    return text;
+};
+
+Mautic.showNotification = function(message, type) {
+    type = type || 'info';
+    alert(message); // Replace with your notification system
+};
+
+Mautic.showError = function(message) {
+    alert('Error: ' + message); // Replace with your error notification system
+};
+</script>
+
+<style>
+.filters-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.filter-search {
+    flex: 1;
+    max-width: 300px;
+}
+
+.filter-status {
+    width: 150px;
+}
+
+.progress {
+    margin-bottom: 0;
+}
+
+.label {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.label-success { background-color: #5cb85c; color: white; }
+.label-default { background-color: #777; color: white; }
+.label-warning { background-color: #f0ad4e; color: white; }
+.label-info { background-color: #5bc0de; color: white; }
+.label-danger { background-color: #d9534f; color: white; }
+
+.col-name { width: 25%; }
+.col-status { width: 10%; }
+.col-contacts { width: 8%; }
+.col-sent { width: 8%; }
+.col-progress { width: 15%; }
+.col-rates { width: 12%; }
+.col-dates { width: 12%; }
+.col-actions { width: 10%; }
+
+.media-heading {
+    margin-bottom: 5px;
+}
+
+.text-muted {
+    font-size: 12px;
+}
+</style>
+{% endblock %}

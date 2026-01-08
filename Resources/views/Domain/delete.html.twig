@@ -1,0 +1,21 @@
+{% extends '@MauticCore/Default/content.html.twig' %}
+
+{% block headerTitle %}
+    {{ 'Delete Domain'|trans }}
+{% endblock %}
+
+{% block content %}
+<div class="alert alert-danger">
+    <h4>{{ 'Confirm Delete'|trans }}</h4>
+    <p>{{ 'Are you sure you want to delete domain'|trans }}: <strong>{{ domain.domainName }}</strong>?</p>
+    
+    <form method="post" action="{{ actionUrl }}">
+        <button type="submit" class="btn btn-danger">
+            <i class="fa fa-trash"></i> {{ 'Delete'|trans }}
+        </button>
+        <a href="{{ path('warmup_domain_index') }}" class="btn btn-default">
+            <i class="fa fa-times"></i> {{ 'Cancel'|trans }}
+        </a>
+    </form>
+</div>
+{% endblock %}

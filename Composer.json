@@ -1,0 +1,33 @@
+{
+    "name": "Warmup",
+    "description": "Email warm-up and deliverability optimization plugin for Mautic",
+    "type": "mautic-plugin",
+    "keywords": [
+        "mautic",
+        "plugin",
+        "email",
+        "warmup",
+        "deliverability"
+    ],
+    "extra": {
+        "install-directory-name": "MauticWarmUpBundle"
+    },
+    "minimum-stability": "stable",
+    "require": {
+        "php": ">=7.4",
+        "mautic/core-lib": "^6.0",
+        "symfony/mailer": "^5.4|^6.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "MauticPlugin\\MauticWarmUpBundle\\": ""
+        }
+    },
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Your Name",
+            "email": "your.email@example.com"
+        }
+    ]
+}

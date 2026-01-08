@@ -1,0 +1,482 @@
+{% extends '@MauticCore/Default/content.html.twig' %}
+
+{% block content %}
+<div class="bundle-form">
+    <div class="bundle-form-header">
+        <h3>
+            {% if campaign.id %}
+                <i class="ri-fire-fill"></i> {{ 'warmup.campaign.edit'|trans }}
+            {% else %}
+                <i class="ri-fire-fill"></i> {{ 'warmup.campaign.new'|trans }}
+            {% endif %}
+        </h3>
+    </div>
+
+    <form id="warmup-campaign-form" class="form-horizontal" role="form" method="post" 
+          action="{{ path('warmup_campaign_save') }}" enctype="multipart/form-data">
+        
+        {# CSRF Token #}
+        <input type="hidden" name="csrfToken" value="{{ csrfToken }}" />
+        <input type="hidden" name="campaign[id]" value="{{ campaign.id }}" />
+
+        <div class="box-layout">
+            <div class="col-md-9 bg-white height-auto">
+                <div class="pa-md">
+                    
+                    {# === SECTION 1: INFORMATIONS DE BASE === #}
+                    <div class="form-section">
+                        <h4 class="mb-lg">
+                            <i class="ri-information-line"></i> {{ 'warmup.campaign.section.basic'|trans }}
+                        </h4>
+
+                        {# Nom de la campagne #}
+                        <div class="form-group mb-3">
+                            <label class="control-label required" for="campaign_name">
+                                {{ 'warmup.campaign.name'|trans }}
+                            </label>
+                            <input type="text" 
+                                   id="campaign_name" 
+                                   name="campaign[name]" 
+                                   class="form-control" 
+                                   value="{{ campaign.name }}"
+                                   required />
+                        </div>
+
+                        {# Description #}
+                        <div class="form-group mb-3">
+                            <label class="control-label" for="campaign_description">
+                                {{ 'warmup.campaign.description'|trans }}
+                            </label>
+                            <textarea id="campaign_description" 
+                                      name="campaign[description]" 
+                                      class="form-control" 
+                                      rows="3">{{ campaign.description }}</textarea>
+                        </div>
+
+                        {# Domaine #}
+                        <div class="form-group mb-3">
+                            <label class="control-label required" for="campaign_domain">
+                                {{ 'warmup.campaign.domain'|trans }}
+                            </label>
+                            <select id="campaign_domain" 
+                                    name="campaign[domain_id]" 
+                                    class="form-control" 
+                                    required>
+                                <option value="">{{ 'warmup.campaign.select_domain'|trans }}</option>
+                                {% for domain in domains %}
+                                    <option value="{{ domain.id }}" 
+                                            {% if campaign.domainId == domain.id %}selected{% endif %}>
+                                        {{ domain.name }} ({{ domain.email }})
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <hr class="my-4" />
+
+                    {# === SECTION 2: CONFIGURATION WARMUP === #}
+                    <div class="form-section">
+                        <h4 class="mb-lg">
+                            <i class="ri-settings-3-line"></i> {{ 'warmup.campaign.section.config'|trans }}
+                        </h4>
+
+                        <div class="row">
+                            {# Volume initial #}
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    <label class="control-label required" for="campaign_initial_volume">
+                                        {{ 'warmup.campaign.initial_volume'|trans }}
+                                    </label>
+                                    <input type="number" 
+                                           id="campaign_initial_volume" 
+                                           name="campaign[initial_volume]" 
+                                           class="form-control" 
+                                           value="{{ campaign.initialVolume|default(10) }}"
+                                           min="1"
+                                           max="100"
+                                           required />
+                                    <small class="text-muted">{{ 'warmup.campaign.initial_volume_help'|trans }}</small>
+                                </div>
+                            </div>
+
+                            {# Volume cible #}
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    <label class="control-label required" for="campaign_target_volume">
+                                        {{ 'warmup.campaign.target_volume'|trans }}
+                                    </label>
+                                    <input type="number" 
+                                           id="campaign_target_volume" 
+                                           name="campaign[target_volume]" 
+                                           class="form-control" 
+                                           value="{{ campaign.targetVolume|default(100) }}"
+                                           min="1"
+                                           required />
+                                    <small class="text-muted">{{ 'warmup.campaign.target_volume_help'|trans }}</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            {# Taux d'augmentation #}
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    <label class="control-label required" for="campaign_increase_rate">
+                                        {{ 'warmup.campaign.increase_rate'|trans }} (%)
+                                    </label>
+                                    <input type="number" 
+                                           id="campaign_increase_rate" 
+                                           name="campaign[increase_rate]" 
+                                           class="form-control" 
+                                           value="{{ campaign.increaseRate|default(10) }}"
+                                           min="1"
+                                           max="100"
+                                           step="1"
+                                           required />
+                                    <small class="text-muted">{{ 'warmup.campaign.increase_rate_help'|trans }}</small>
+                                </div>
+                            </div>
+
+                            {# Durée (jours) #}
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    <label class="control-label required" for="campaign_duration">
+                                        {{ 'warmup.campaign.duration'|trans }} ({{ 'warmup.campaign.days'|trans }})
+                                    </label>
+                                    <input type="number" 
+                                           id="campaign_duration" 
+                                           name="campaign[duration_days]" 
+                                           class="form-control" 
+                                           value="{{ campaign.durationDays|default(14) }}"
+                                           min="1"
+                                           max="90"
+                                           required />
+                                    <small class="text-muted">{{ 'warmup.campaign.duration_help'|trans }}</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        {# Bouton Calculer #}
+                        <div class="text-center mb-3">
+                            <button type="button" id="btn-calculate-warmup" class="btn btn-info">
+                                <i class="ri-calculator-line"></i> {{ 'warmup.campaign.calculate'|trans }}
+                            </button>
+                        </div>
+
+                        {# Preview de la progression #}
+                        <div id="warmup-preview" class="alert alert-info" style="display:none;">
+                            <h5>{{ 'warmup.campaign.preview_title'|trans }}</h5>
+                            <div id="warmup-preview-content"></div>
+                        </div>
+                    </div>
+
+                    <hr class="my-4" />
+
+                    {# === SECTION 3: CONTACTS === #}
+                    <div class="form-section">
+                        <h4 class="mb-lg">
+                            <i class="ri-contacts-line"></i> {{ 'warmup.campaign.section.contacts'|trans }}
+                        </h4>
+
+                        <div class="form-group mb-3">
+                            <label class="control-label">
+                                {{ 'warmup.campaign.contact_source'|trans }}
+                            </label>
+                            <div class="radio">
+                                <label>
+                                    <input type="radio" 
+                                           name="campaign[contact_source]" 
+                                           value="segment" 
+                                           {% if campaign.contactSource == 'segment' or not campaign.contactSource %}checked{% endif %}
+                                           onchange="toggleContactSource(this.value)" />
+                                    {{ 'warmup.campaign.use_segment'|trans }}
+                                </label>
+                            </div>
+                            <div class="radio">
+                                <label>
+                                    <input type="radio" 
+                                           name="campaign[contact_source]" 
+                                           value="csv" 
+                                           {% if campaign.contactSource == 'csv' %}checked{% endif %}
+                                           onchange="toggleContactSource(this.value)" />
+                                    {{ 'warmup.campaign.upload_csv'|trans }}
+                                </label>
+                            </div>
+                        </div>
+
+                        {# Segment Mautic #}
+                        <div id="segment-selection" class="form-group mb-3" 
+                             style="display:{% if campaign.contactSource == 'segment' or not campaign.contactSource %}block{% else %}none{% endif %}">
+                            <label class="control-label" for="campaign_segment">
+                                {{ 'warmup.campaign.segment'|trans }}
+                            </label>
+                            <select id="campaign_segment" 
+                                    name="campaign[segment_id]" 
+                                    class="form-control">
+                                <option value="">{{ 'warmup.campaign.select_segment'|trans }}</option>
+                                {% for segment in segments %}
+                                    <option value="{{ segment.id }}" 
+                                            data-count="{{ segment.leadCount }}"
+                                            {% if campaign.segmentId == segment.id %}selected{% endif %}>
+                                        {{ segment.name }} ({{ segment.leadCount }} contacts)
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        {# Upload CSV #}
+                        <div id="csv-upload" class="form-group mb-3" 
+                             style="display:{% if campaign.contactSource == 'csv' %}block{% else %}none{% endif %}">
+                            <label class="control-label" for="campaign_csv">
+                                {{ 'warmup.campaign.csv_file'|trans }}
+                            </label>
+                            <input type="file" 
+                                   id="campaign_csv" 
+                                   name="campaign[csv_file]" 
+                                   class="form-control" 
+                                   accept=".csv" />
+                            <small class="text-muted">{{ 'warmup.campaign.csv_format'|trans }}</small>
+                        </div>
+                    </div>
+
+                    <hr class="my-4" />
+
+                    {# === SECTION 4: TEMPLATE === #}
+                    <div class="form-section">
+                        <h4 class="mb-lg">
+                            <i class="ri-mail-line"></i> {{ 'warmup.campaign.section.template'|trans }}
+                        </h4>
+
+                        <div class="form-group mb-3">
+                            <label class="control-label required" for="campaign_template">
+                                {{ 'warmup.campaign.template'|trans }}
+                            </label>
+                            <select id="campaign_template" 
+                                    name="campaign[template_id]" 
+                                    class="form-control" 
+                                    required>
+                                <option value="">{{ 'warmup.campaign.select_template'|trans }}</option>
+                                {% for template in templates %}
+                                    <option value="{{ template.id }}" 
+                                            {% if campaign.templateId == template.id %}selected{% endif %}>
+                                        {{ template.name }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <div class="mt-2">
+                                <button type="button" 
+                                        id="btn-preview-template" 
+                                        class="btn btn-sm btn-default">
+                                    <i class="ri-eye-line"></i> {{ 'warmup.campaign.preview_template'|trans }}
+                                </button>
+                                <button type="button" 
+                                        id="btn-send-test" 
+                                        class="btn btn-sm btn-primary">
+                                    <i class="ri-send-plane-line"></i> {{ 'warmup.campaign.send_test'|trans }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            {# === SIDEBAR === #}
+            <div class="col-md-3 bg-white height-auto bdr-l">
+                <div class="pa-md">
+                    
+                    {# Statut #}
+                    <div class="form-group mb-3">
+                        <label class="control-label">{{ 'warmup.campaign.status'|trans }}</label>
+                        <div class="well well-sm">
+                            {% if campaign.status %}
+                                <span class="label label-{{ campaign.status == 'active' ? 'success' : 'default' }}">
+                                    {{ ('warmup.campaign.status.' ~ campaign.status)|trans }}
+                                </span>
+                            {% else %}
+                                <span class="label label-default">{{ 'warmup.campaign.status.draft'|trans }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {# Dates #}
+                    {% if campaign.createdAt %}
+                    <div class="form-group mb-3">
+                        <label class="control-label">{{ 'warmup.campaign.created_at'|trans }}</label>
+                        <div class="well well-sm">
+                            {{ campaign.createdAt|date('Y-m-d H:i') }}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {# Statistiques rapides #}
+                    {% if campaign.id %}
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            <h4 class="panel-title">{{ 'warmup.campaign.quick_stats'|trans }}</h4>
+                        </div>
+                        <div class="panel-body">
+                            <div class="stat-item mb-2">
+                                <strong>{{ 'warmup.campaign.emails_sent'|trans }}:</strong>
+                                <span class="pull-right">{{ campaign.emailsSent|default(0) }}</span>
+                            </div>
+                            <div class="stat-item mb-2">
+                                <strong>{{ 'warmup.campaign.current_day'|trans }}:</strong>
+                                <span class="pull-right">{{ campaign.currentDay|default(0) }}</span>
+                            </div>
+                            <div class="stat-item">
+                                <strong>{{ 'warmup.campaign.progress'|trans }}:</strong>
+                                <span class="pull-right">{{ campaign.progress|default(0) }}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {# Actions #}
+                    <hr />
+                    <div class="button-group">
+                        <button type="submit" class="btn btn-primary btn-block">
+                            <i class="ri-save-line"></i> {{ 'warmup.campaign.save'|trans }}
+                        </button>
+                        <a href="{{ path('warmup_campaign_index') }}" class="btn btn-default btn-block">
+                            <i class="ri-close-line"></i> {{ 'warmup.campaign.cancel'|trans }}
+                        </a>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+    </form>
+</div>
+
+{# === MODAL POUR TEST EMAIL === #}
+<div class="modal fade" id="test-email-modal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+                <h4 class="modal-title">{{ 'warmup.campaign.send_test'|trans }}</h4>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="test_email">{{ 'warmup.campaign.test_email_address'|trans }}</label>
+                    <input type="email" id="test_email" class="form-control" 
+                           placeholder="email@example.com" required />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">
+                    {{ 'warmup.campaign.close'|trans }}
+                </button>
+                <button type="button" id="btn-confirm-test" class="btn btn-primary">
+                    <i class="ri-send-plane-line"></i> {{ 'warmup.campaign.send'|trans }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# === JAVASCRIPT === #}
+<script>
+// Toggle entre Segment et CSV
+function toggleContactSource(source) {
+    document.getElementById('segment-selection').style.display = 
+        source === 'segment' ? 'block' : 'none';
+    document.getElementById('csv-upload').style.display = 
+        source === 'csv' ? 'block' : 'none';
+}
+
+// Calculer la progression warmup
+document.getElementById('btn-calculate-warmup').addEventListener('click', function() {
+    const initialVolume = document.getElementById('campaign_initial_volume').value;
+    const targetVolume = document.getElementById('campaign_target_volume').value;
+    const increaseRate = document.getElementById('campaign_increase_rate').value;
+    const duration = document.getElementById('campaign_duration').value;
+
+    fetch('{{ path('warmup_campaign_calculate_warmup') }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({
+            initial_volume: initialVolume,
+            target_volume: targetVolume,
+            increase_rate: increaseRate,
+            duration_days: duration
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            displayWarmupPreview(data.progression);
+        } else {
+            alert(data.message || 'Error calculating warmup');
+        }
+    })
+    .catch(error => console.error('Error:', error));
+});
+
+// Afficher le preview de la progression
+function displayWarmupPreview(progression) {
+    const preview = document.getElementById('warmup-preview');
+    const content = document.getElementById('warmup-preview-content');
+    
+    let html = '<table class="table table-sm">';
+    html += '<thead><tr><th>Day</th><th>Emails</th><th>Cumulative</th></tr></thead><tbody>';
+    
+    progression.forEach(day => {
+        html += `<tr>
+            <td>Day ${day.day}</td>
+            <td>${day.volume}</td>
+            <td>${day.cumulative}</td>
+        </tr>`;
+    });
+    
+    html += '</tbody></table>';
+    content.innerHTML = html;
+    preview.style.display = 'block';
+}
+
+// Envoyer un email de test
+document.getElementById('btn-send-test').addEventListener('click', function() {
+    const templateId = document.getElementById('campaign_template').value;
+    if (!templateId) {
+        alert('{{ 'warmup.campaign.select_template_first'|trans }}');
+        return;
+    }
+    $('#test-email-modal').modal('show');
+});
+
+document.getElementById('btn-confirm-test').addEventListener('click', function() {
+    const email = document.getElementById('test_email').value;
+    const templateId = document.getElementById('campaign_template').value;
+
+    fetch('{{ path('warmup_campaign_send_test_email') }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({
+            template_id: templateId,
+            email: email
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('{{ 'warmup.campaign.test_sent'|trans }}');
+            $('#test-email-modal').modal('hide');
+        } else {
+            alert(data.message || 'Error sending test email');
+        }
+    });
+});
+</script>
+
+{% endblock %}

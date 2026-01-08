@@ -1,0 +1,512 @@
+{% extends '@MauticCore/Default/content.html.twig' %}
+
+{% block headerTitle %}
+    {% if isEdit %}
+        Modifier la campagne : {{ campaign.campaignName }}
+    {% else %}
+        Créer une nouvelle campagne
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="warmup-campaign-form">
+    {{ form_start(form, {
+        'attr': {
+            'id': 'campaignForm',
+            'class': 'form-horizontal',
+            'data-toggle': 'ajax',
+            'data-spinner': 'campaign_form_spinner'
+        }
+    }) }}
+    
+    <div class="row">
+        <div class="col-md-12">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">Informations de base</h3>
+                </div>
+                <div class="panel-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            {{ form_row(form.campaignName) }}
+                        </div>
+                        <div class="col-md-6">
+                            {{ form_row(form.domain) }}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12">
+                            {{ form_row(form.description) }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-12">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">Planning</h3>
+                </div>
+                <div class="panel-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            {{ form_row(form.startDate) }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form_row(form.sendTime) }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form_row(form.sendFrequency) }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-12">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">Paramètres de warmup</h3>
+                </div>
+                <div class="panel-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            {{ form_row(form.warmupType) }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form_row(form.startVolume) }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form_row(form.durationDays) }}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            {{ form_row(form.dailyIncrement) }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form_row(form.enableWeekends) }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form_row(form.enableRandomization) }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-12">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">Contacts</h3>
+                </div>
+                <div class="panel-body">
+                    {{ form_row(form.contactSource) }}
+                    
+                    <div id="manualContactsSection" style="{{ form.contactSource.vars.value == 'manual' ? '' : 'display: none;' }}">
+                        {{ form_row(form.manualContacts) }}
+                    </div>
+                    
+                    <div id="mauticContactsSection" style="{{ form.contactSource.vars.value == 'mautic' ? '' : 'display: none;' }}">
+                        {{ form_row(form.segmentId) }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-12">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">Contenu de l'email</h3>
+                </div>
+                <div class="panel-body">
+                    {{ form_row(form.subjectTemplate) }}
+                    
+                    <div class="form-group">
+                        <label class="control-label">Variables disponibles :</label>
+                        <div class="help-block">
+                            <span class="variable-tag" data-variable="{{ '{{first_name}}' }}">{{ '{{first_name}}' }}</span>
+                            <span class="variable-tag" data-variable="{{ '{{last_name}}' }}">{{ '{{last_name}}' }}</span>
+                            <span class="variable-tag" data-variable="{{ '{{email}}' }}">{{ '{{email}}' }}</span>
+                            <span class="variable-tag" data-variable="{{ '{{unsubscribe_link}}' }}">{{ '{{unsubscribe_link}}' }}</span>
+                            <span class="variable-tag" data-variable="{{ '{{campaign_name}}' }}">{{ '{{campaign_name}}' }}</span>
+                        </div>
+                    </div>
+                    
+                    {{ form_row(form.customMessage) }}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="form-actions text-right">
+        <a href="{{ path('warmup_campaign_index') }}" class="btn btn-default">
+            <i class="fa fa-times"></i> Annuler
+        </a>
+        <button type="submit" name="save" class="btn btn-primary">
+            <i class="fa fa-save"></i> 
+            {% if isEdit %}
+                Mettre à jour
+            {% else %}
+                Créer
+            {% endif %}
+        </button>
+        <button type="submit" name="saveAndActivate" class="btn btn-success">
+            <i class="fa fa-play"></i> 
+            {% if isEdit %}
+                Mettre à jour et activer
+            {% else %}
+                Créer et activer
+            {% endif %}
+        </button>
+    </div>
+    
+    {{ form_end(form) }}
+</div>
+{% endblock %}
+
+{% block contentFooter %}
+<script>
+(function() {
+    'use strict';
+    
+    Mautic.onPageLoad(function(container, response) {
+        // Initialiser les écouteurs d'événements
+        initCampaignForm();
+    });
+    
+    function initCampaignForm() {
+        var contactSourceSelect = mQuery('[name="campaign_form[contactSource]"]');
+        var manualSection = mQuery('#manualContactsSection');
+        var mauticSection = mQuery('#mauticContactsSection');
+        
+        if (contactSourceSelect.length) {
+            // Initialiser l'état
+            toggleContactSections(contactSourceSelect.val());
+            
+            // Ajouter l'écouteur
+            contactSourceSelect.on('change', function() {
+                toggleContactSections(mQuery(this).val());
+            });
+        }
+        
+        // Variables cliquables
+        mQuery('.variable-tag').on('click', function() {
+            var variable = mQuery(this).data('variable');
+            var textarea = mQuery('[name="campaign_form[customMessage]"]');
+            
+            if (textarea.length) {
+                var currentValue = textarea.val();
+                var cursorPos = textarea.prop('selectionStart');
+                var textBefore = currentValue.substring(0, cursorPos);
+                var textAfter = currentValue.substring(cursorPos);
+                
+                textarea.val(textBefore + variable + textAfter).trigger('change');
+                
+                // Replacer le curseur
+                var newPos = cursorPos + variable.length;
+                textarea.prop('selectionStart', newPos);
+                textarea.prop('selectionEnd', newPos);
+                textarea.focus();
+            }
+        });
+        
+        // Heure par défaut
+        var sendTimeInput = mQuery('[name="campaign_form[sendTime]"]');
+        if (sendTimeInput.length && !sendTimeInput.val()) {
+            sendTimeInput.val('09:00');
+        }
+        
+        // Date par défaut (demain)
+        var startDateInput = mQuery('[name="campaign_form[startDate]"]');
+        if (startDateInput.length && !startDateInput.val()) {
+            var tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            
+            // Format YYYY-MM-DD
+            var year = tomorrow.getFullYear();
+            var month = String(tomorrow.getMonth() + 1).padStart(2, '0');
+            var day = String(tomorrow.getDate()).padStart(2, '0');
+            
+            startDateInput.val(year + '-' + month + '-' + day);
+        }
+        
+        // Validation des emails manuels
+        var validateEmailsBtn = mQuery('<button type="button" class="btn btn-default btn-sm" style="margin-top: 5px;">');
+        validateEmailsBtn.html('<i class="fa fa-check"></i> Valider les emails');
+        
+        if (manualSection.length) {
+            manualSection.find('.form-group:last').append(validateEmailsBtn);
+            
+            validateEmailsBtn.on('click', function() {
+                var textarea = mQuery('[name="campaign_form[manualContacts]"]');
+                if (!textarea.length) return;
+                
+                var emails = textarea.val().split('\n');
+                var validCount = 0;
+                var invalidEmails = [];
+                
+                emails.forEach(function(email) {
+                    email = email.trim();
+                    if (email) {
+                        var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                        if (emailRegex.test(email)) {
+                            validCount++;
+                        } else {
+                            invalidEmails.push(email);
+                        }
+                    }
+                });
+                
+                var message = validCount + ' email(s) valide(s) trouvé(s)';
+                var type = 'success';
+                
+                if (invalidEmails.length > 0) {
+                    message = validCount + ' email(s) valide(s), ' + invalidEmails.length + ' invalide(s)';
+                    type = 'warning';
+                }
+                
+                Mautic.showNotification(message, type);
+            });
+        }
+        
+        // Calcul du plan de warmup
+        var calculateBtn = mQuery('<button type="button" class="btn btn-info" style="margin-top: 15px;">');
+        calculateBtn.html('<i class="fa fa-calculator"></i> Calculer le plan de warmup');
+        
+        var warmupPanel = mQuery('.panel:has([name="campaign_form[warmupType]"])');
+        if (warmupPanel.length) {
+            warmupPanel.append(calculateBtn);
+            
+            calculateBtn.on('click', function() {
+                var totalContacts = getTotalContacts();
+                var durationDays = mQuery('[name="campaign_form[durationDays]"]').val();
+                var warmupType = mQuery('[name="campaign_form[warmupType]"]').val();
+                var startVolume = mQuery('[name="campaign_form[startVolume]"]').val();
+                var dailyIncrement = mQuery('[name="campaign_form[dailyIncrement]"]').val();
+                
+                if (!totalContacts || totalContacts === 0) {
+                    Mautic.showNotification('Veuillez d\'abord ajouter des contacts', 'warning');
+                    return;
+                }
+                
+                if (!durationDays || !warmupType || !startVolume) {
+                    Mautic.showNotification('Veuillez remplir tous les paramètres de warmup', 'warning');
+                    return;
+                }
+                
+                Mautic.startPageLoadingBar();
+                
+                mQuery.ajax({
+                    url: '{{ path("warmup_campaign_calculate_warmup") }}',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        totalContacts: totalContacts,
+                        durationDays: durationDays,
+                        warmupType: warmupType,
+                        startVolume: startVolume,
+                        increasePerDay: dailyIncrement
+                    }),
+                    success: function(response) {
+                        Mautic.stopPageLoadingBar();
+                        
+                        if (response.success) {
+                            showWarmupPlan(response.plan, response.stats);
+                        } else {
+                            Mautic.showNotification(response.message, 'error');
+                        }
+                    },
+                    error: function(xhr) {
+                        Mautic.stopPageLoadingBar();
+                        Mautic.showNotification('Erreur lors du calcul', 'error');
+                    }
+                });
+            });
+        }
+        
+        // Tester l'email
+        var testEmailBtn = mQuery('<button type="button" class="btn btn-warning" style="margin-top: 15px;">');
+        testEmailBtn.html('<i class="fa fa-paper-plane"></i> Tester l\'email');
+        
+        var contentPanel = mQuery('.panel:has([name="campaign_form[customMessage]"])');
+        if (contentPanel.length) {
+            contentPanel.append(testEmailBtn);
+            
+            testEmailBtn.on('click', function() {
+                var domain = mQuery('[name="campaign_form[domain]"]').val();
+                var subject = mQuery('[name="campaign_form[subjectTemplate]"]').val();
+                var message = mQuery('[name="campaign_form[customMessage]"]').val();
+                
+                if (!domain) {
+                    Mautic.showNotification('Veuillez sélectionner un domaine', 'warning');
+                    return;
+                }
+                
+                if (!subject || !message) {
+                    Mautic.showNotification('Veuillez remplir le sujet et le contenu', 'warning');
+                    return;
+                }
+                
+                var testEmail = prompt('Entrez l\'adresse email de test:', 'test@example.com');
+                
+                if (!testEmail || !isValidEmail(testEmail)) {
+                    Mautic.showNotification('Adresse email invalide', 'warning');
+                    return;
+                }
+                
+                Mautic.startPageLoadingBar();
+                
+                mQuery.ajax({
+                    url: '{{ path("warmup_campaign_send_test_email") }}',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        testEmail: testEmail,
+                        domainId: domain,
+                        subject: subject,
+                        message: message
+                    }),
+                    success: function(response) {
+                        Mautic.stopPageLoadingBar();
+                        
+                        if (response.success) {
+                            Mautic.showNotification('Email de test envoyé avec succès!', 'success');
+                        } else {
+                            Mautic.showNotification('Erreur: ' + response.message, 'error');
+                        }
+                    },
+                    error: function(xhr) {
+                        Mautic.stopPageLoadingBar();
+                        Mautic.showNotification('Erreur lors de l\'envoi du test', 'error');
+                    }
+                });
+            });
+        }
+    }
+    
+    function toggleContactSections(source) {
+        var manualSection = mQuery('#manualContactsSection');
+        var mauticSection = mQuery('#mauticContactsSection');
+        
+        if (source === 'manual') {
+            manualSection.show();
+            mauticSection.hide();
+        } else if (source === 'mautic') {
+            manualSection.hide();
+            mauticSection.show();
+        }
+    }
+    
+    function getTotalContacts() {
+        var contactSource = mQuery('[name="campaign_form[contactSource]"]').val();
+        var total = 0;
+        
+        if (contactSource === 'manual') {
+            var textarea = mQuery('[name="campaign_form[manualContacts]"]');
+            if (textarea.length) {
+                var emails = textarea.val().split('\n');
+                emails.forEach(function(email) {
+                    email = email.trim();
+                    if (email && isValidEmail(email)) {
+                        total++;
+                    }
+                });
+            }
+        } else if (contactSource === 'mautic') {
+            // Ici vous pourriez ajouter une requête AJAX pour obtenir le nombre de contacts
+            // Pour l'instant, retourner 0
+            total = 0;
+        }
+        
+        return total;
+    }
+    
+    function isValidEmail(email) {
+        var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
+    }
+    
+    function showWarmupPlan(plan, stats) {
+        var html = '<div class="well" style="margin-top: 15px;">';
+        html += '<h4>Plan de warmup calculé</h4>';
+        html += '<p><strong>Total d\'emails:</strong> ' + stats.total + '</p>';
+        html += '<p><strong>Moyenne par jour:</strong> ' + stats.average + '</p>';
+        html += '<p><strong>Min/Max:</strong> ' + stats.min + ' / ' + stats.max + '</p>';
+        
+        html += '<div style="max-height: 200px; overflow-y: auto; margin-top: 10px;">';
+        html += '<table class="table table-sm table-bordered">';
+        html += '<thead><tr><th>Jour</th><th>Emails</th><th>Cumul</th></tr></thead>';
+        html += '<tbody>';
+        
+        var cumulative = 0;
+        plan.forEach(function(day) {
+            cumulative += day.emails;
+            html += '<tr>';
+            html += '<td>Jour ' + day.day + '</td>';
+            html += '<td>' + day.emails + '</td>';
+            html += '<td>' + cumulative + '</td>';
+            html += '</tr>';
+        });
+        
+        html += '</tbody></table></div></div>';
+        
+        // Supprimer l'ancien affichage s'il existe
+        mQuery('#warmupPlanResult').remove();
+        
+        // Ajouter le nouveau
+        var calculateBtn = mQuery('.btn:contains("Calculer le plan de warmup")');
+        if (calculateBtn.length) {
+            calculateBtn.after('<div id="warmupPlanResult">' + html + '</div>');
+        }
+    }
+})();
+</script>
+
+<style>
+.warmup-campaign-form .panel {
+    margin-bottom: 20px;
+}
+
+.warmup-campaign-form .variable-tag {
+    display: inline-block;
+    margin: 2px 5px;
+    padding: 3px 8px;
+    background: #e8e8e8;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.2s;
+}
+
+.warmup-campaign-form .variable-tag:hover {
+    background: #4CAF50;
+    color: white;
+}
+
+.warmup-campaign-form .form-actions {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #ddd;
+}
+
+.warmup-campaign-form .panel-heading {
+    background-color: #f5f5f5;
+    border-bottom: 1px solid #ddd;
+}
+
+.warmup-campaign-form .panel-title {
+    font-size: 16px;
+    font-weight: bold;
+}
+</style>
+{% endblock %}

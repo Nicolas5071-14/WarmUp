@@ -1,0 +1,791 @@
+<?php
+
+namespace MauticPlugin\MauticWarmUpBundle\Controller;
+
+use Doctrine\ORM\EntityManagerInterface;
+use Mautic\LeadBundle\Model\ListModel;
+use MauticPlugin\MauticWarmUpBundle\Entity\Campaign;
+use MauticPlugin\MauticWarmUpBundle\Entity\Domain;
+use MauticPlugin\MauticWarmUpBundle\Entity\Template;
+use MauticPlugin\MauticWarmUpBundle\Entity\WarmupType;
+use MauticPlugin\MauticWarmUpBundle\Form\Type\CampaignFormType;
+use MauticPlugin\MauticWarmUpBundle\Model\CampaignModel;
+use MauticPlugin\MauticWarmUpBundle\Model\WarmupProgressionCalculator;
+use Symfony\Component\Form\FormFactoryInterface;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\RedirectResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\Session\SessionInterface;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+use Symfony\Component\HttpFoundation\RequestStack;
+use Twig\Environment;
+
+class CampaignController
+{
+    private EntityManagerInterface $em;
+    private CampaignModel $campaignModel;
+    private WarmupProgressionCalculator $warmupCalculator;
+    private ListModel $segmentModel;
+    private FormFactoryInterface $formFactory;
+    private UrlGeneratorInterface $router;
+    private RequestStack $requestStack;
+    private Environment $twig;
+
+    public function __construct(
+        EntityManagerInterface $em,
+        CampaignModel $campaignModel,
+        WarmupProgressionCalculator $warmupCalculator,
+        ListModel $segmentModel,
+        FormFactoryInterface $formFactory,
+        UrlGeneratorInterface $router,
+        RequestStack $requestStack,
+        Environment $twig
+    ) {
+        $this->em = $em;
+        $this->campaignModel = $campaignModel;
+        $this->warmupCalculator = $warmupCalculator;
+        $this->segmentModel = $segmentModel;
+        $this->formFactory = $formFactory;
+        $this->router = $router;
+        $this->requestStack = $requestStack;
+        $this->twig = $twig;
+    }
+
+    /**
+     * Helper method to get session from request stack
+     */
+    private function getSession(): SessionInterface
+    {
+        return $this->requestStack->getSession();
+    }
+
+    /**
+     * List campaigns
+     */
+    public function indexAction(Request $request): Response
+    {
+        return new Response(
+            $this->twig->render('@MauticWarmUp/Campaign/index.html.twig', [
+                'tmpl' => 'index',
+            ])
+        );
+    }
+
+    /**
+     * AJAX endpoint to list campaigns with pagination and search
+     */
+    public function ajaxListCampaignAction(Request $request): JsonResponse
+    {
+        error_log('🔥 ajaxListCampaignAction CALLED');
+
+        try {
+            $page = max(1, (int) $request->query->get('page', 1));
+            $limit = max(1, min(100, (int) $request->query->get('limit', 25)));
+            $search = trim((string) $request->query->get('search', ''));
+
+            error_log('📥 Params: ' . json_encode([
+                'page' => $page,
+                'limit' => $limit,
+                'search' => $search
+            ]));
+
+            $start = ($page - 1) * $limit;
+
+            $params = [
+                'start' => $start,
+                'limit' => $limit,
+            ];
+
+            if (!empty($search)) {
+                $params['filter'] = $search;
+            }
+
+            error_log('📦 Calling CampaignModel::getEntities with: ' . json_encode($params));
+
+            $campaigns = $this->campaignModel->getEntities($params);
+
+            error_log('📊 Campaigns RAW result count: ' . count($campaigns));
+
+            $totalCount = $this->campaignModel->getTotalCount();
+            error_log('📊 Total count: ' . $totalCount);
+
+            $data = [];
+
+            foreach ($campaigns as $campaign) {
+                $data[] = [
+                    'id' => $campaign['id'],
+                    'campaignName' => $campaign['campaignName'],
+                    'description' => $campaign['description'],
+                    'status' => $campaign['status'],
+                    'totalContacts' => $campaign['totalContacts'],
+                    'startDate' => $campaign['startDate'] instanceof \DateTime
+                        ? $campaign['startDate']->format('Y-m-d H:i:s')
+                        : null,
+                    'warmupType' => $campaign['warmupType'] ?? '',
+                    'domainName' => $campaign['domainName'] ?? '',
+                    'createdAt' => $campaign['createdAt'] instanceof \DateTime
+                        ? $campaign['createdAt']->format('Y-m-d H:i:s')
+                        : null,
+                ];
+            }
+
+            error_log('✅ JSON DATA FINAL: ' . json_encode($data));
+
+            return new JsonResponse([
+                'success' => true,
+                'data' => $data,
+                'pagination' => [
+                    'page' => $page,
+                    'limit' => $limit,
+                    'total' => $totalCount,
+                    'totalPages' => (int) ceil($totalCount / $limit),
+                ]
+            ]);
+
+        } catch (\Throwable $e) {
+            error_log('❌ ajaxListCampaignAction ERROR: ' . $e->getMessage());
+            error_log($e->getTraceAsString());
+
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Error loading campaigns',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Créer une nouvelle campagne
+     */
+    public function newAction(Request $request): Response
+    {
+        $campaign = new Campaign();
+        return $this->showForm($request, $campaign, false);
+    }
+
+    /**
+     * Éditer une campagne existante
+     */
+    public function editAction(Request $request, int $id): Response
+    {
+        $campaign = $this->campaignModel->getEntity($id);
+        if (!$campaign) {
+            $this->getSession()->getFlashBag()->add('error', 'Campaign not found');
+            return new RedirectResponse($this->router->generate('warmup_campaign_index'));
+        }
+
+        return $this->showForm($request, $campaign, true);
+    }
+
+    /**
+     * Afficher le formulaire
+     */
+    private function showForm(Request $request, Campaign $campaign, bool $isEdit): Response
+    {
+        // Définir les valeurs par défaut si création
+        if (!$isEdit) {
+            $campaign->setStartDate(new \DateTime('+1 day'));
+            $campaign->setStartTime(new \DateTime('09:00'));
+            $campaign->setEndTime(new \DateTime('17:00'));
+            $campaign->setSendTime(new \DateTime('09:00'));
+            $campaign->setSendFrequency('daily');
+            $campaign->setStatus('draft');
+            $campaign->setStartVolume(20);
+            $campaign->setDurationDays(42);
+            $campaign->setMaxContacts(100);
+            $campaign->setDuplicateHandling('skip');
+            $campaign->setSyncType('one_time');
+            $campaign->setContactSource('manual');
+        }
+
+        // Créer le formulaire
+        $action = $isEdit
+            ? $this->router->generate('warmup_campaign_edit', ['id' => $campaign->getId()])
+            : $this->router->generate('warmup_campaign_new');
+
+        $form = $this->formFactory->create(CampaignFormType::class, $campaign, [
+            'action' => $action,
+            'is_edit' => $isEdit,
+        ]);
+
+        // Récupérer les données pour les dropdowns
+        $domains = $this->em->getRepository(Domain::class)->findBy(['isActive' => true], ['domainName' => 'ASC']);
+        $warmupTypes = $this->em->getRepository(WarmupType::class)->findAll();
+        $templates = $this->em->getRepository(Template::class)->findBy(['isActive' => true], ['templateName' => 'ASC']);
+        $mauticSegments = $this->segmentModel->getEntities(['filter' => ['isPublished' => true]]);
+
+        // Préparer les données pour le template
+        $data = [
+            'campaign' => $campaign,
+            'form' => $form->createView(),
+            'domains' => $domains,
+            'warmupTypes' => $warmupTypes,
+            'templates' => $templates,
+            'mauticSegments' => $mauticSegments,
+            'isEdit' => $isEdit,
+            'title' => $isEdit ? 'Edit Campaign: ' . $campaign->getCampaignName() : 'Create New Campaign',
+            'action' => $action,
+            'userEmail' => $this->getUserEmail(),
+            'userName' => $this->getUserName(),
+        ];
+
+        return new Response(
+            $this->twig->render('@MauticWarmUp/Campaign/form.html.twig', array_merge(
+                $data,
+                [
+                    'tmpl' => $request->isXmlHttpRequest()
+                        ? $request->get('tmpl', 'index')
+                        : 'index',
+                    'permissions' => [
+                        'warmup:campaigns:view' => true,
+                        'warmup:campaigns:create' => true,
+                        'warmup:campaigns:edit' => true,
+                        'warmup:campaigns:delete' => true,
+                    ],
+                ]
+            ))
+        );
+    }
+
+    /**
+     * Sauvegarder la campagne (POST)
+     */
+    public function saveAction(Request $request): Response
+    {
+        $isEdit = $request->request->has('campaign_id') && $request->request->get('campaign_id');
+        $campaignId = $isEdit ? (int) $request->request->get('campaign_id') : 0;
+
+        // Récupérer ou créer la campagne
+        $campaign = $isEdit
+            ? $this->campaignModel->getEntity($campaignId)
+            : new Campaign();
+
+        if (!$campaign && $isEdit) {
+            $this->getSession()->getFlashBag()->add('error', 'Campaign not found');
+            return new RedirectResponse($this->router->generate('warmup_campaign_index'));
+        }
+
+        // Créer le formulaire
+        $form = $this->formFactory->create(CampaignFormType::class, $campaign, [
+            'is_edit' => $isEdit,
+        ]);
+
+        $form->handleRequest($request);
+
+        if ($form->isSubmitted() && $form->isValid()) {
+            try {
+                // Sauvegarder la campagne
+                $this->campaignModel->saveEntity($campaign);
+
+                // Gérer les contacts selon la source
+                $this->processContacts($campaign, $request);
+
+                // Message de succès
+                $message = $isEdit ? 'Campaign updated successfully!' : 'Campaign created successfully!';
+                $this->getSession()->getFlashBag()->add('success', $message);
+
+                // Rediriger vers la liste ou rester sur l'édition
+                if ($request->request->has('save_and_activate')) {
+                    $campaign->setStatus('active');
+                    $this->campaignModel->saveEntity($campaign);
+                    $this->getSession()->getFlashBag()->add('success', 'Campaign activated successfully!');
+                }
+
+                return new RedirectResponse($this->router->generate('warmup_campaign_index'));
+
+            } catch (\Exception $e) {
+                $this->getSession()->getFlashBag()->add('error', 'Error saving campaign: ' . $e->getMessage());
+            }
+        } else {
+            $errors = [];
+            foreach ($form->getErrors(true) as $error) {
+                $errors[] = $error->getMessage();
+            }
+            $this->getSession()->getFlashBag()->add('error', 'Please correct the errors: ' . implode(', ', $errors));
+        }
+
+        // Si erreur, réafficher le formulaire
+        return $this->showForm($request, $campaign, $isEdit);
+    }
+
+    /**
+     * Start campaign
+     */
+    public function startAction(Request $request, int $id): JsonResponse
+    {
+        $campaign = $this->campaignModel->getEntity($id);
+
+        if (!$campaign) {
+            return new JsonResponse(['success' => false, 'message' => 'Campaign not found'], 404);
+        }
+
+        try {
+            $campaign->setStatus('active');
+            $this->campaignModel->saveEntity($campaign);
+
+            return new JsonResponse([
+                'success' => true,
+                'message' => 'Campaign started successfully',
+                'status' => 'active',
+            ]);
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Error starting campaign: ' . $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Pause campaign
+     */
+    public function pauseAction(Request $request, int $id): JsonResponse
+    {
+        $campaign = $this->campaignModel->getEntity($id);
+
+        if (!$campaign) {
+            return new JsonResponse(['success' => false, 'message' => 'Campaign not found'], 404);
+        }
+
+        try {
+            $campaign->setStatus('paused');
+            $this->campaignModel->saveEntity($campaign);
+
+            return new JsonResponse([
+                'success' => true,
+                'message' => 'Campaign paused',
+                'status' => 'paused',
+            ]);
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Error pausing campaign: ' . $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Resume campaign
+     */
+    public function resumeAction(Request $request, int $id): JsonResponse
+    {
+        $campaign = $this->campaignModel->getEntity($id);
+
+        if (!$campaign) {
+            return new JsonResponse(['success' => false, 'message' => 'Campaign not found'], 404);
+        }
+
+        try {
+            $campaign->setStatus('active');
+            $this->campaignModel->saveEntity($campaign);
+
+            return new JsonResponse([
+                'success' => true,
+                'message' => 'Campaign resumed',
+                'status' => 'active',
+            ]);
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Error resuming campaign: ' . $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Get campaign progress
+     */
+    public function progressAction(Request $request, int $id): JsonResponse
+    {
+        $campaign = $this->campaignModel->getEntity($id);
+
+        if (!$campaign) {
+            return new JsonResponse(['success' => false, 'message' => 'Campaign not found'], 404);
+        }
+
+        try {
+            $progress = $this->campaignModel->getProgress($campaign);
+
+            return new JsonResponse([
+                'success' => true,
+                'progress' => $progress,
+            ]);
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Error getting progress: ' . $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Get campaign contacts
+     */
+    public function contactsAction(Request $request, int $id): JsonResponse
+    {
+        $campaign = $this->campaignModel->getEntity($id);
+
+        if (!$campaign) {
+            return new JsonResponse(['success' => false, 'message' => 'Campaign not found'], 404);
+        }
+
+        try {
+            $contacts = $this->campaignModel->getCampaignContacts($campaign);
+
+            return new JsonResponse([
+                'success' => true,
+                'contacts' => $contacts,
+                'count' => count($contacts),
+            ]);
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Error getting contacts: ' . $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Import contacts to campaign
+     */
+    public function importContactsAction(Request $request, int $id): JsonResponse
+    {
+        $campaign = $this->campaignModel->getEntity($id);
+
+        if (!$campaign) {
+            return new JsonResponse(['success' => false, 'message' => 'Campaign not found'], 404);
+        }
+
+        try {
+            $importData = json_decode($request->getContent(), true);
+            $result = $this->campaignModel->importContacts($campaign, $importData);
+
+            return new JsonResponse([
+                'success' => true,
+                'message' => 'Contacts imported successfully',
+                'imported' => $result['imported'],
+                'skipped' => $result['skipped'],
+            ]);
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Error importing contacts: ' . $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Calculer le planning de warmup (AJAX)
+     */
+    public function calculateWarmupAction(Request $request): JsonResponse
+    {
+        try {
+            $data = json_decode($request->getContent(), true);
+
+            $plan = $this->warmupCalculator->calculate(
+                (int) $data['totalEmails'],
+                (int) $data['durationDays'],
+                $data['warmupType'],
+                isset($data['ratio']) ? (float) $data['ratio'] : null,
+                isset($data['startingBaseline']) ? (int) $data['startingBaseline'] : null,
+                isset($data['increasePerDay']) ? (int) $data['increasePerDay'] : null
+            );
+
+            return new JsonResponse([
+                'success' => true,
+                'plan' => $plan,
+                'stats' => $this->calculateStats($plan),
+            ]);
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    /**
+     * Prévisualiser les contacts (AJAX)
+     */
+    public function previewContactsAction(Request $request): JsonResponse
+    {
+        try {
+            $segmentId = $request->request->get('segment_id');
+            $limit = $request->request->getInt('limit', 50);
+
+            $segment = $segmentId ? $this->segmentModel->getEntity($segmentId) : null;
+            $contacts = $this->segmentModel->getLeadsByList($segment, true);
+
+            // Limiter le nombre de contacts
+            $previewContacts = array_slice($contacts, 0, $limit);
+
+            return new JsonResponse([
+                'success' => true,
+                'count' => count($previewContacts),
+                'total_available' => count($contacts),
+                'contacts' => array_map(function ($contact) {
+                    return [
+                        'email' => $contact['email'] ?? '',
+                        'firstname' => $contact['firstname'] ?? '',
+                        'lastname' => $contact['lastname'] ?? '',
+                        'company' => $contact['company'] ?? '',
+                    ];
+                }, $previewContacts),
+            ]);
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    /**
+     * Upload CSV (AJAX)
+     */
+    public function uploadCsvAction(Request $request): JsonResponse
+    {
+        try {
+            $file = $request->files->get('csv_file');
+            if (!$file) {
+                throw new \Exception('No file uploaded');
+            }
+
+            $contacts = $this->processCsvFile($file);
+
+            return new JsonResponse([
+                'success' => true,
+                'imported' => count($contacts),
+                'contacts' => array_slice($contacts, 0, 10), // Retourner les 10 premiers pour prévisualisation
+            ]);
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    /**
+     * Envoyer un email test (AJAX)
+     */
+    public function sendTestEmailAction(Request $request): JsonResponse
+    {
+        try {
+            // Récupérer les données
+            $testEmail = $request->request->get('test_email');
+            $domainId = $request->request->get('domain_id');
+            $subjectTemplate = $request->request->get('subjectTemplate ');
+            $message = $request->request->get('message');
+
+            // Valider l'email
+            if (!filter_var($testEmail, FILTER_VALIDATE_EMAIL)) {
+                throw new \Exception('Invalid email address');
+            }
+
+            // Récupérer le domaine
+            $domain = $this->em->getRepository(Domain::class)->find($domainId);
+            if (!$domain) {
+                throw new \Exception('Domain not found');
+            }
+
+            // Ici, vous implémenteriez l'envoi d'email réel
+            // Pour l'instant, on simule un succès
+            $result = [
+                'from' => $domain->getDefaultEmail() ?: 'noreply@' . $domain->getDomainName(),
+                'to' => $testEmail,
+                'subjectTemplate ' => $subjectTemplate,
+                'message_id' => uniqid('test_', true),
+            ];
+
+            return new JsonResponse([
+                'success' => true,
+                'message' => 'Test email sent successfully!',
+                'details' => $result,
+            ]);
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    /**
+     * Traiter les contacts selon la source
+     */
+    private function processContacts(Campaign $campaign, Request $request): void
+    {
+        $contactSource = $request->request->get('contact_source', 'manual');
+
+        switch ($contactSource) {
+            case 'mautic':
+                $this->processMauticContacts($campaign, $request);
+                break;
+            case 'csv':
+                $this->processCsvContacts($campaign, $request);
+                break;
+            default: // manual
+                $this->processManualContacts($campaign, $request);
+        }
+    }
+
+    /**
+     * Traiter les contacts Mautic
+     */
+    private function processMauticContacts(Campaign $campaign, Request $request): void
+    {
+        $segmentId = $request->request->get('segment_id');
+        $maxContacts = $request->request->getInt('max_contacts', 100);
+
+        $segment = $segmentId ? $this->segmentModel->getEntity($segmentId) : null;
+        $contacts = $this->segmentModel->getLeadsByList($segment, true);
+
+        // Limiter le nombre de contacts
+        $contacts = array_slice($contacts, 0, $maxContacts);
+
+        // Sauvegarder les contacts
+        $this->saveCampaignContacts($campaign, $contacts);
+    }
+
+    /**
+     * Traiter les contacts CSV
+     */
+    private function processCsvContacts(Campaign $campaign, Request $request): void
+    {
+        $file = $request->files->get('csv_file');
+        if (!$file) {
+            return;
+        }
+
+        $contacts = $this->processCsvFile($file);
+        $this->saveCampaignContacts($campaign, $contacts);
+    }
+
+    /**
+     * Traiter les contacts manuels
+     */
+    private function processManualContacts(Campaign $campaign, Request $request): void
+    {
+        $manualText = $request->request->get('manual_contacts', '');
+        if (!$manualText) {
+            return;
+        }
+
+        $contacts = [];
+        $lines = array_filter(array_map('trim', explode("\n", $manualText)));
+
+        foreach ($lines as $line) {
+            $parts = array_map('trim', explode(',', $line));
+            if (count($parts) >= 1) {
+                $email = trim($parts[0]);
+                if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    $contacts[] = [
+                        'email' => $email,
+                        'first_name' => $parts[1] ?? '',
+                        'last_name' => $parts[2] ?? '',
+                        'company' => $parts[3] ?? '',
+                    ];
+                }
+            }
+        }
+
+        $this->saveCampaignContacts($campaign, $contacts);
+    }
+
+    /**
+     * Traiter un fichier CSV
+     */
+    private function processCsvFile($file): array
+    {
+        $contacts = [];
+
+        if (($handle = fopen($file->getPathname(), 'r')) !== false) {
+            $headers = fgetcsv($handle);
+            while (($row = fgetcsv($handle)) !== false) {
+                if (count($row) === count($headers)) {
+                    $contact = array_combine($headers, $row);
+                    $email = $contact['email'] ?? $contact['Email'] ?? $contact['EMAIL'] ?? '';
+
+                    if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                        $contacts[] = [
+                            'email' => $email,
+                            'first_name' => $contact['first_name'] ?? $contact['firstname'] ?? $contact['First Name'] ?? '',
+                            'last_name' => $contact['last_name'] ?? $contact['lastname'] ?? $contact['Last Name'] ?? '',
+                            'company' => $contact['company'] ?? $contact['Company'] ?? '',
+                        ];
+                    }
+                }
+            }
+            fclose($handle);
+        }
+
+        return $contacts;
+    }
+
+    /**
+     * Sauvegarder les contacts de la campagne
+     */
+    private function saveCampaignContacts(Campaign $campaign, array $contacts): void
+    {
+        // Ici, vous implémenteriez la sauvegarde des contacts dans la base de données
+        // Pour l'instant, on stocke simplement le compte
+        $campaign->setTotalContacts(count($contacts));
+        $this->campaignModel->saveEntity($campaign);
+    }
+
+    /**
+     * Calculer les statistiques du planning
+     */
+    private function calculateStats(array $plan): array
+    {
+        $emails = array_column($plan, 'emails');
+
+        if (empty($emails)) {
+            return [
+                'total' => 0,
+                'average' => 0,
+                'min' => 0,
+                'max' => 0,
+                'first' => 0,
+                'last' => 0,
+            ];
+        }
+
+        $first = $emails[0];
+        $last = end($emails);
+
+        return [
+            'total' => array_sum($emails),
+            'average' => round(array_sum($emails) / count($emails), 1),
+            'min' => min($emails),
+            'max' => max($emails),
+            'first' => $first,
+            'last' => $last,
+            'growth_rate' => $first > 0
+                ? round(($last / $first) * 100, 2) . '%'
+                : 'N/A'
+        ];
+    }
+
+    /**
+     * Get user email (helper method)
+     */
+    private function getUserEmail(): string
+    {
+        // Implémentez la logique pour récupérer l'email de l'utilisateur
+        // Pour l'instant, retournez une valeur par défaut
+        return 'user@example.com';
+    }
+
+    /**
+     * Get user name (helper method)
+     */
+    private function getUserName(): string
+    {
+        // Implémentez la logique pour récupérer le nom de l'utilisateur
+        // Pour l'instant, retournez une valeur par défaut
+        return 'User';
+    }
+}

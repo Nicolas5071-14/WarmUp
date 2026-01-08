@@ -1,0 +1,269 @@
+<?php
+
+namespace MauticPlugin\MauticWarmUpBundle\Form\Type;
+
+use Mautic\LeadBundle\Form\Type\LeadListType;
+use MauticPlugin\MauticWarmUpBundle\Entity\Domain;
+use MauticPlugin\MauticWarmUpBundle\Entity\Template;
+use MauticPlugin\MauticWarmUpBundle\Entity\WarmupType;
+use Symfony\Bridge\Doctrine\Form\Type\EntityType;
+use Symfony\Component\Form\AbstractType;
+use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
+use Symfony\Component\Form\Extension\Core\Type\DateTimeType;
+use Symfony\Component\Form\Extension\Core\Type\EmailType;
+use Symfony\Component\Form\Extension\Core\Type\FileType;
+use Symfony\Component\Form\Extension\Core\Type\IntegerType;
+use Symfony\Component\Form\Extension\Core\Type\RadioType;
+use Symfony\Component\Form\Extension\Core\Type\SubmitType;
+use Symfony\Component\Form\Extension\Core\Type\TextareaType;
+use Symfony\Component\Form\Extension\Core\Type\TextType;
+use Symfony\Component\Form\Extension\Core\Type\TimeType;
+use Symfony\Component\Form\FormBuilderInterface;
+use Symfony\Component\OptionsResolver\OptionsResolver;
+use Symfony\Component\Validator\Constraints\File;
+
+class CampaignFormType extends AbstractType
+{
+    public function buildForm(FormBuilderInterface $builder, array $options): void
+    {
+        // Étape 1: Basics
+        $builder->add('campaignName', TextType::class, [
+            'label' => 'Campaign Name *',
+            'required' => true,
+            'attr' => ['placeholder' => 'Enter campaign name']
+        ]);
+
+        $builder->add('description', TextareaType::class, [
+            'label' => 'Description',
+            'required' => false,
+            'attr' => ['rows' => 3, 'placeholder' => 'Describe the purpose of this campaign']
+        ]);
+
+        $builder->add('startDate', DateTimeType::class, [
+            'label' => 'Start Date *',
+            'widget' => 'single_text',
+            'required' => true,
+            'attr' => ['class' => 'form-control']
+        ]);
+
+        $builder->add('endDate', DateTimeType::class, [
+            'label' => 'End Date (Optional)',
+            'widget' => 'single_text',
+            'required' => false,
+            'attr' => ['class' => 'form-control']
+        ]);
+
+        $builder->add('startTime', TimeType::class, [
+            'label' => 'Start Time (Madagascar) *',
+            'widget' => 'single_text',
+            'required' => true,
+        ]);
+
+        $builder->add('endTime', TimeType::class, [
+            'label' => 'End Time (Madagascar) *',
+            'widget' => 'single_text',
+            'required' => true,
+        ]);
+
+        $builder->add('sendTime', TimeType::class, [
+            'label' => 'Daily Send Time (Madagascar) *',
+            'widget' => 'single_text',
+            'required' => true,
+        ]);
+
+        $builder->add('sendFrequency', ChoiceType::class, [
+            'label' => 'Send Frequency',
+            'choices' => [
+                'Every day' => 'daily',
+                'Monday-Friday only' => 'weekdays',
+                'Once per week (Monday)' => 'weekly',
+                'Twice per week (Mon & Thu)' => 'twice_weekly',
+            ],
+            'required' => true,
+        ]);
+
+        $builder->add('status', ChoiceType::class, [
+            'label' => 'Status',
+            'choices' => [
+                'Draft' => 'draft',
+                'Active' => 'active',
+                'Paused' => 'paused',
+                'Scheduled' => 'scheduled',
+            ],
+            'required' => true,
+        ]);
+
+        // Étape 2: Contacts
+        $builder->add('contactSource', ChoiceType::class, [
+            'label' => 'Contact Source *',
+            'choices' => [
+                'Add manually (CSV/Text)' => 'manual',
+                'Use Mautic contacts' => 'mautic',
+                'Import from CSV file' => 'csv',
+            ],
+            'expanded' => true,
+            'multiple' => false,
+            'required' => true,
+        ]);
+        $builder->add('csvFile', FileType::class, [
+            'label' => 'CSV File',
+            'required' => false,
+            'mapped' => false, // <-- IMPORTANT: Non mappé à l'entité
+            'attr' => ['accept' => '.csv,.txt'],
+            'constraints' => [
+                new File([
+                    'maxSize' => '5M',
+                    'mimeTypes' => [
+                        'text/csv',
+                        'text/plain',
+                        'application/csv',
+                        'application/vnd.ms-excel',
+                    ],
+                    'mimeTypesMessage' => 'Please upload a valid CSV file',
+                ])
+            ]
+        ]);
+
+        $builder->add('manualContacts', TextareaType::class, [
+            'label' => 'Manual Contacts',
+            'required' => false,
+            'attr' => ['rows' => 8, 'placeholder' => 'One email per line, or CSV format...']
+        ]);
+
+
+        $builder->add('segmentId', LeadListType::class, [
+            'label' => 'Select Mautic Segment (optional)',
+            'required' => false,
+            'attr' => ['class' => 'form-control']
+        ]);
+
+        $builder->add('maxContacts', IntegerType::class, [
+            'label' => 'Maximum number of contacts to import',
+            'required' => false,
+            'attr' => ['min' => 1, 'max' => 5000]
+        ]);
+
+        $builder->add('syncType', ChoiceType::class, [
+            'label' => 'Import Type',
+            'choices' => [
+                'One-time import' => 'one_time',
+                'Auto-sync daily' => 'auto_sync',
+            ],
+            'required' => false,
+        ]);
+
+        $builder->add('csvFile', FileType::class, [
+            'label' => 'CSV File',
+            'required' => false,
+            'attr' => ['accept' => '.csv,.txt']
+        ]);
+
+        $builder->add('manualContacts', TextareaType::class, [
+            'label' => 'Manual Contacts',
+            'required' => false,
+            'attr' => ['rows' => 8, 'placeholder' => 'One email per line, or CSV format...']
+        ]);
+
+        $builder->add('totalContacts', IntegerType::class, [
+            'label' => 'Total Contacts',
+            'required' => false,
+        ]);
+
+        $builder->add('duplicateHandling', ChoiceType::class, [
+            'label' => 'Duplicate Handling',
+            'choices' => [
+                'Skip duplicates' => 'skip',
+                'Update existing' => 'update',
+                'Allow duplicates' => 'allow',
+            ],
+            'required' => false,
+        ]);
+
+        // Étape 3: Domain
+        $builder->add('domain', EntityType::class, [
+            'label' => 'Select Domain *',
+            'class' => Domain::class,
+            'choice_label' => 'domainName',
+            'query_builder' => function ($repository) {
+                return $repository->createQueryBuilder('d')
+                    ->where('d.isActive = :active')
+                    ->setParameter('active', true)
+                    ->orderBy('d.domainName', 'ASC');
+            },
+            'required' => true,
+            'attr' => ['class' => 'form-control']
+        ]);
+
+        // Étape 4: Warmup
+        $builder->add('warmupType', EntityType::class, [
+            'label' => 'Warmup Type *',
+            'class' => WarmupType::class,
+            'choice_label' => 'typeName',
+            'required' => true,
+            'attr' => ['class' => 'form-control']
+        ]);
+
+        $builder->add('startVolume', IntegerType::class, [
+            'label' => 'Initial Volume (emails/day) *',
+            'required' => true,
+            'attr' => ['min' => 1, 'max' => 1000]
+        ]);
+
+        $builder->add('durationDays', IntegerType::class, [
+            'label' => 'Warmup Duration (days) *',
+            'required' => true,
+            'attr' => ['min' => 14, 'max' => 180]
+        ]);
+
+        // Étape 6: Content
+        $builder->add('template', EntityType::class, [
+            'label' => 'Email Template (Optional)',
+            'class' => Template::class,
+            'choice_label' => 'templateName',
+            'query_builder' => function ($repository) {
+                return $repository->createQueryBuilder('t')
+                    ->where('t.isActive = :active')
+                    ->setParameter('active', true)
+                    ->orderBy('t.templateName', 'ASC');
+            },
+            'required' => false,
+            'attr' => ['class' => 'form-control']
+        ]);
+
+        $builder->add('subjectTemplate', TextType::class, [
+            'label' => 'Default Subject Line *',
+            'required' => true,
+            'attr' => ['placeholder' => 'Default email subject']
+        ]);
+
+        $builder->add('customMessage', TextareaType::class, [
+            'label' => 'Default Message *',
+            'required' => true,
+            'attr' => ['rows' => 10, 'placeholder' => 'Default email content...']
+        ]);
+
+        // Bouton de soumission
+        $builder->add('save', SubmitType::class, [
+            'label' => $options['is_edit'] ? 'Update Campaign' : 'Create Campaign',
+            'attr' => ['class' => 'btn btn-primary btn-lg']
+        ]);
+
+        $builder->add('saveAndActivate', SubmitType::class, [
+            'label' => $options['is_edit'] ? 'Update & Activate' : 'Create & Activate',
+            'attr' => ['class' => 'btn btn-success btn-lg']
+        ]);
+    }
+
+    public function configureOptions(OptionsResolver $resolver): void
+    {
+        $resolver->setDefaults([
+            'data_class' => 'MauticPlugin\MauticWarmUpBundle\Entity\Campaign',
+            'is_edit' => false,
+        ]);
+    }
+
+    public function getBlockPrefix(): string
+    {
+        return 'campaign_form';
+    }
+}

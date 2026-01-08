@@ -1,0 +1,168 @@
+{% extends '@MauticCore/Default/content.html.twig' %}
+
+{% block headerTitle %}
+    {% if domain.id %}
+        {{ 'Edit Domain'|trans }}
+    {% else %}
+        {{ 'New Domain'|trans }}
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="warmup-domain-form">
+    <form method="post" action="{{ actionUrl }}" class="form-horizontal">
+        {{ form_start(form) }}
+
+
+
+        
+        <div class="row">
+        
+            <div class="col-md-6">
+            
+                <div class="panel panel-default">
+                
+                    <div class="panel-heading">
+                        <h3 class="panel-title">{{ 'Domain Information'|trans }}</h3>
+                    </div>
+                    <div class="panel-body">
+                        <div class="form-group">
+                            {{ form_label(form.domainName) }}
+                            {{ form_widget(form.domainName) }}
+                            {{ form_errors(form.domainName) }}
+                        </div>
+                        
+                        <div class="form-group">
+                            {{ form_label(form.emailPrefix) }}
+                            {{ form_widget(form.emailPrefix) }}
+                            {{ form_errors(form.emailPrefix) }}
+                        </div>
+                        
+                        <div class="form-group">
+                            {{ form_label(form.dailyLimit) }}
+                            {{ form_widget(form.dailyLimit) }}
+                            {{ form_errors(form.dailyLimit) }}
+                        </div>
+                        
+                        <div class="form-group">
+                            {{ form_label(form.warmupPhase) }}
+                            {{ form_widget(form.warmupPhase) }}
+                            {{ form_errors(form.warmupPhase) }}
+                        </div>
+                        
+                        <div class="form-group">
+                            {{ form_label(form.isActive) }}
+                            {{ form_widget(form.isActive) }}
+                            {{ form_errors(form.isActive) }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="panel panel-default">
+                    <div class="panel-heading">
+                        <h3 class="panel-title">{{ 'SMTP Settings'|trans }}</h3>
+                    </div>
+                    <div class="panel-body">
+                        <div class="form-group">
+                            {{ form_label(form.smtpHost) }}
+                            {{ form_widget(form.smtpHost) }}
+                            {{ form_errors(form.smtpHost) }}
+                        </div>
+                        
+                        <div class="form-group">
+                            {{ form_label(form.smtpPort) }}
+                            {{ form_widget(form.smtpPort) }}
+                            {{ form_errors(form.smtpPort) }}
+                        </div>
+                        
+                        <div class="form-group">
+                            {{ form_label(form.smtpUsername) }}
+                            {{ form_widget(form.smtpUsername) }}
+                            {{ form_errors(form.smtpUsername) }}
+                        </div>
+                        
+                        <div class="form-group">
+                            {{ form_label(form.smtpPassword) }}
+                            {{ form_widget(form.smtpPassword) }}
+                            {{ form_errors(form.smtpPassword) }}
+                        </div>
+                        
+                        <div class="form-group">
+                            {{ form_label(form.smtpEncryption) }}
+                            {{ form_widget(form.smtpEncryption) }}
+                            {{ form_errors(form.smtpEncryption) }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+       
+         
+            <a href="{{ path('warmup_domain_index') }}" class="btn btn-default">
+                <i class="fa fa-times"></i> {{ 'Cancel'|trans }}
+            </a>
+            
+            {% if domain.id %}
+            <button type="button" class="btn btn-success" id="verify-smtp-btn">
+                <i class="fa fa-check"></i> {{ 'Test SMTP Connection'|trans }}
+            </button>
+            {% endif %}
+        
+        {{ form_end(form) }}
+    </form>
+</div>
+{% endblock %}
+{% block contentFooter %}
+{% if domain.id %}
+<script>
+// ❌ SUPPRIMEZ cette partie
+// if (typeof window.$ === 'undefined' && typeof window.mQuery !== 'undefined') {
+//     window.$ = window.mQuery;
+// }
+
+// ✅ Utilisez cette approche
+(function() {
+    'use strict';
+    
+    Mautic.onPageLoad(function() {
+        mQuery('#verify-smtp-btn').off('click').on('click', function() {
+            if (!confirm('{{ "This will test the SMTP connection. Continue?"|trans }}')) {
+                return;
+            }
+
+            mQuery.ajax({
+                url: '{{ path("warmup_domain_verify", {id: domain.id}) }}',
+                type: 'POST',
+                beforeSend: function() {
+                    Mautic.startPageLoadingBar();
+                },
+                success: function(response) {
+                    Mautic.stopPageLoadingBar();
+
+                    if (response && response.success) {
+                        Mautic.showNotification(response.message, 'success');
+                    } else {
+                        Mautic.showNotification(
+                            response.message || '{{ "Verification failed"|trans }}',
+                            'error'
+                        );
+                    }
+                },
+                error: function(xhr) {
+                    Mautic.stopPageLoadingBar();
+                    Mautic.showNotification(
+                        '{{ "Error verifying domain"|trans }}',
+                        'error'
+                    );
+                    console.error(xhr.responseText);
+                }
+            });
+        });
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

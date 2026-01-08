@@ -1,0 +1,327 @@
+{% extends '@MauticCore/Default/content.html.twig' %}
+
+{% block headerTitle %}
+    {{ 'warmup.campaign.contacts'|trans }}: {{ campaign.campaignName }}
+    <small>({{ contacts|length }} contacts)</small>
+{% endblock %}
+
+{% block actions %}
+    <div class="page-actions">
+        <div class="btn-group" role="group">
+            <a href="{{ path('warmup_campaign_edit', {id: campaign.id}) }}" class="btn btn-default">
+                <i class="ri-arrow-left-line"></i>
+                {{ 'mautic.core.back'|trans }}
+            </a>
+            <a href="{{ path('warmup_campaign_import', {id: campaign.id}) }}" class="btn btn-primary">
+                <i class="ri-upload-line"></i>
+                {{ 'warmup.campaign.import_contacts'|trans }}
+            </a>
+            <button type="button" class="btn btn-default" onclick="Mautic.exportContacts()">
+                <i class="ri-download-line"></i>
+                {{ 'mautic.core.export'|trans }}
+            </button>
+        </div>
+    </div>
+{% endblock %}
+
+{% block content %}
+<div class="panel panel-default bdr-t-wdh-0 mb-0">
+    <div class="panel-body">
+        <!-- Campaign info -->
+        <div class="row mb-md">
+            <div class="col-md-12">
+                <div class="alert alert-info">
+                    <strong>{{ 'warmup.campaign.total_contacts'|trans }}:</strong> {{ campaign.totalContacts }} |
+                    <strong>{{ 'warmup.campaign.emails_sent'|trans }}:</strong> {{ campaign.emailsSent }} |
+                    <strong>{{ 'warmup.campaign.progress'|trans }}:</strong> {{ campaign.progress }}%
+                </div>
+            </div>
+        </div>
+        
+        <!-- Search and filters -->
+        <div class="row mb-md">
+            <div class="col-sm-12">
+                <div class="filters-toolbar">
+                    <div class="filter-search">
+                        <input type="text" 
+                               id="contact-search" 
+                               class="form-control" 
+                               placeholder="{{ 'mautic.core.search.placeholder'|trans }}"
+                               onkeyup="Mautic.searchContacts(this.value)"
+                               autocomplete="off">
+                    </div>
+                    <div class="filter-status ml-md">
+                        <select id="contact-status-filter" class="form-control" onchange="Mautic.filterByStatus(this.value)">
+                            <option value="">{{ 'mautic.core.filter.all'|trans }}</option>
+                            <option value="active">{{ 'mautic.core.active'|trans }}</option>
+                            <option value="inactive">{{ 'mautic.core.inactive'|trans }}</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Contacts table -->
+        <div class="table-responsive">
+            <table class="table table-hover" id="contacts-table">
+                <thead>
+                    <tr>
+                        <th class="col-email">{{ 'mautic.core.email'|trans }}</th>
+                        <th class="col-name">{{ 'mautic.core.name'|trans }}</th>
+                        <th class="col-sent">{{ 'warmup.contact.sent_count'|trans }}</th>
+                        <th class="col-last">{{ 'warmup.contact.last_sent'|trans }}</th>
+                        <th class="col-next">{{ 'warmup.contact.next_send'|trans }}</th>
+                        <th class="col-status">{{ 'mautic.core.status'|trans }}</th>
+                        <th class="col-actions">{{ 'mautic.core.actions'|trans }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for contact in contacts %}
+                    <tr>
+                        <td>{{ contact.email }}</td>
+                        <td>
+                            {% if contact.firstName or contact.lastName %}
+                                {{ contact.firstName }} {{ contact.lastName }}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ contact.sentCount }}</td>
+                        <td>
+                            {% if contact.lastSent %}
+                                {{ contact.lastSent|date('Y-m-d H:i') }}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if contact.nextSendDate %}
+                                {{ contact.nextSendDate|date('Y-m-d H:i') }}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if contact.isActive %}
+                                <span class="label label-success">{{ 'mautic.core.active'|trans }}</span>
+                            {% else %}
+                                <span class="label label-default">{{ 'mautic.core.inactive'|trans }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="dropdown">
+                                <button class="btn btn-default btn-xs dropdown-toggle" type="button" data-toggle="dropdown">
+                                    {{ 'mautic.core.actions'|trans }}
+                                    <span class="caret"></span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-right">
+                                    <li>
+                                        <a href="#" onclick="Mautic.viewContactDetails({{ contact.id }})">
+                                            <i class="ri-eye-line"></i> {{ 'mautic.core.view'|trans }}
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a href="#" onclick="Mautic.toggleContactStatus({{ contact.id }}, {{ contact.isActive ? 'false' : 'true' }})">
+                                            <i class="ri-toggle-{{ contact.isActive ? 'off' : 'on' }}-line"></i>
+                                            {{ contact.isActive ? 'mautic.core.deactivate'|trans : 'mautic.core.activate'|trans }}
+                                        </a>
+                                    </li>
+                                    <li class="divider"></li>
+                                    <li>
+                                        <a href="#" class="text-danger" onclick="Mautic.removeContact({{ contact.id }})">
+                                            <i class="ri-delete-bin-line"></i> {{ 'mautic.core.delete'|trans }}
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center">
+                            <div class="alert alert-info">
+                                {{ 'warmup.campaign.no_contacts'|trans }}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        {% if totalPages > 1 %}
+        <div class="panel-footer">
+            <div class="row">
+                <div class="col-sm-6">
+                    <div class="pagination-info">
+                        {{ 'mautic.core.pagination.info'|trans({
+                            '%start%': start,
+                            '%end%': end,
+                            '%total%': total
+                        }) }}
+                    </div>
+                </div>
+                <div class="col-sm-6 text-right">
+                    <ul class="pagination pagination-sm">
+                        {% if page > 1 %}
+                        <li>
+                            <a href="{{ path('warmup_campaign_contacts', {id: campaign.id, page: page-1}) }}">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% for i in 1..totalPages %}
+                            {% if i == page %}
+                                <li class="active"><span>{{ i }}</span></li>
+                            {% else %}
+                                <li>
+                                    <a href="{{ path('warmup_campaign_contacts', {id: campaign.id, page: i}) }}">
+                                        {{ i }}
+                                    </a>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if page < totalPages %}
+                        <li>
+                            <a href="{{ path('warmup_campaign_contacts', {id: campaign.id, page: page+1}) }}">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block contentScripts %}
+<script>
+var Mautic = Mautic || {};
+
+Mautic.searchContacts = function(searchTerm) {
+    clearTimeout(this.searchTimeout);
+    this.searchTimeout = setTimeout(function() {
+        var rows = document.querySelectorAll('#contacts-table tbody tr');
+        rows.forEach(function(row) {
+            var text = row.textContent.toLowerCase();
+            row.style.display = text.includes(searchTerm.toLowerCase()) ? '' : 'none';
+        });
+    }, 300);
+};
+
+Mautic.filterByStatus = function(status) {
+    var rows = document.querySelectorAll('#contacts-table tbody tr');
+    rows.forEach(function(row) {
+        if (!row.querySelector('td')) return;
+        
+        var statusCell = row.querySelector('td:nth-child(6)');
+        if (!statusCell) return;
+        
+        var isActive = statusCell.textContent.includes('Active');
+        
+        if (!status || 
+            (status === 'active' && isActive) || 
+            (status === 'inactive' && !isActive)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+};
+
+Mautic.viewContactDetails = function(contactId) {
+    // Implement contact details modal
+    alert('View contact details: ' + contactId);
+};
+
+Mautic.toggleContactStatus = function(contactId, activate) {
+    if (!confirm(activate ? 
+        '{{ 'warmup.contact.confirm_activate'|trans }}' : 
+        '{{ 'warmup.contact.confirm_deactivate'|trans }}')) {
+        return;
+    }
+    
+    fetch('{{ path("warmup_contact_toggle", {id: "__id__"}) }}'.replace('__id__', contactId), {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ activate: activate })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.message || 'Error updating contact status');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to update contact status');
+    });
+};
+
+Mautic.removeContact = function(contactId) {
+    if (!confirm('{{ 'warmup.contact.confirm_delete'|trans }}')) {
+        return;
+    }
+    
+    fetch('{{ path("warmup_contact_delete", {id: "__id__"}) }}'.replace('__id__', contactId), {
+        method: 'DELETE',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.message || 'Error deleting contact');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to delete contact');
+    });
+};
+
+Mautic.exportContacts = function() {
+    // Implement export functionality
+    window.location.href = '{{ path("warmup_contact_export", {campaignId: campaign.id}) }}';
+};
+</script>
+
+<style>
+.filters-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.filter-search {
+    flex: 1;
+    max-width: 300px;
+}
+
+.filter-status {
+    width: 150px;
+}
+
+.col-email { width: 25%; }
+.col-name { width: 20%; }
+.col-sent { width: 10%; }
+.col-last { width: 15%; }
+.col-next { width: 15%; }
+.col-status { width: 10%; }
+.col-actions { width: 5%; }
+</style>
+{% endblock %}
