@@ -232,7 +232,7 @@ class SentLog
         // sequenceDay
         $metadata->mapField([
             'fieldName' => 'sequenceDay',
-            'columnName' => 'sequence_day',
+            'columnName' => 'sequenceDay',
             'type' => 'integer',
             'nullable' => false
         ]);
@@ -240,7 +240,7 @@ class SentLog
         // emailSubject
         $metadata->mapField([
             'fieldName' => 'emailSubject',
-            'columnName' => 'email_subject',
+            'columnName' => 'emailSubject',
             'type' => 'string',
             'length' => 255,
             'nullable' => false
@@ -249,7 +249,7 @@ class SentLog
         // emailContent
         $metadata->mapField([
             'fieldName' => 'emailContent',
-            'columnName' => 'email_content',
+            'columnName' => 'emailContent',
             'type' => 'text',
             'nullable' => false
         ]);
@@ -257,7 +257,7 @@ class SentLog
         // sendTime
         $metadata->mapField([
             'fieldName' => 'sendTime',
-            'columnName' => 'send_time',
+            'columnName' => 'sendTime',
             'type' => 'datetime',
             'nullable' => false
         ]);
@@ -274,7 +274,7 @@ class SentLog
         // messageId
         $metadata->mapField([
             'fieldName' => 'messageId',
-            'columnName' => 'message_id',
+            'columnName' => 'messageId',
             'type' => 'string',
             'length' => 255,
             'nullable' => true
@@ -283,7 +283,7 @@ class SentLog
         // errorMessage
         $metadata->mapField([
             'fieldName' => 'errorMessage',
-            'columnName' => 'error_message',
+            'columnName' => 'errorMessage',
             'type' => 'text',
             'nullable' => true
         ]);

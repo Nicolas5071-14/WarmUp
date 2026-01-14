@@ -1,336 +1,649 @@
 {% extends '@MauticCore/Default/content.html.twig' %}
 
 {% block headerTitle %}
-    {{ 'Email Warmup Campaigns'|trans }}
+	{{ 'Campaigns'|trans }}
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="panel panel-default">
-        <div class="panel-heading">
-            <div class="row">
-                <div class="col-sm-6">
-                    <h3 class="panel-title">
-                        <i class="fa fa-rocket"></i> Campaigns
-                    </h3>
-                </div>
-                <div class="col-sm-6 text-right">
-                    <a href="{{ path('warmup_campaign_new') }}" class="btn btn-primary">
-                        <i class="fa fa-plus"></i> New Campaign
-                    </a>
-                </div>
-            </div>
-        </div>
-        
-        <div class="panel-body">
-            <div class="table-responsive">
-                <table id="campaignsTable" class="table table-striped table-bordered" style="width:100%">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Name</th>
-                            <th>Status</th>
-                            <th>Contacts</th>
-                            <th>Sent</th>
-                            <th>Start Date</th>
-                            <th>Progress</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Data will be loaded via AJAX -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>
+	<div class="warmup-campaigns-container">
+		<div class="row mb-3">
+			<div class="col-xs-6">
+				<a href="{{ path('warmup_campaign_new') }}" class="btn btn-primary">
+					<i class="ri-add-line ri-fw"></i>
+					{{ 'New Campaign'|trans }}
+				</a>
+			</div>
+			<div class="col-xs-6">
+				<div class="input-group">
+					<input type="text" id="search-input" class="form-control" placeholder="{{ 'Search campaigns...'|trans }}">
+					<span class="input-group-btn">
+						<button class="btn btn-default" id="search-btn" type="button">
+							<i class="ri-search-line ri-fw"></i>
+						</button>
+					</span>
+				</div>
+			</div>
+		</div>
 
-<style>
-.status-badge {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 3px;
-    font-size: 11px;
-    font-weight: bold;
-    text-transform: uppercase;
-}
+		<div class="panel panel-default mt-20">
+			<div class="panel-body">
+				<div class="table-responsive">
+					<table class="table table-hover table-striped" id="campaigns-table">
+						<thead>
+							<tr>
+								<th>{{ 'Name'|trans }}</th>
+								<th>{{ 'Status'|trans }}</th>
+								<th>{{ 'Contacts'|trans }}</th>
+								<th>{{ 'Sent'|trans }}</th>
+								<th>{{ 'Progress'|trans }}</th>
+								<th>{{ 'Start Date'|trans }}</th>
+								<th class="text-right">{{ 'Actions'|trans }}</th>
+							</tr>
+						</thead>
+						<tbody id="campaigns-tbody">
+							<tr>
+								<td colspan="7" class="text-center">
+									<i class="ri-loader-2-line ri-spin ri-2x ri-fw"></i>
+									<p class="mt-10">{{ 'Loading campaigns...'|trans }}</p>
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
 
-.status-active { 
-    background-color: #5cb85c; 
-    color: white; 
-}
+				<div class="text-center" id="pagination-container"></div>
+			</div>
+		</div>
+		<input type="hidden" id="csrf-token" name="_token" value="{{ csrf_token('authenticate') }}">
+	</div>
 
-.status-paused { 
-    background-color: #f0ad4e; 
-    color: white; 
-}
-
-.status-draft { 
-    background-color: #999; 
-    color: white; 
-}
-
-.status-completed { 
-    background-color: #5bc0de; 
-    color: white; 
-}
-
-.progress {
-    margin-bottom: 0;
-    height: 22px;
-}
-
-.progress-bar {
-    line-height: 22px;
-    font-size: 11px;
-}
-
-#campaignsTable {
-    font-size: 13px;
-}
-
-#campaignsTable td {
-    vertical-align: middle !important;
-}
-
-.dataTables_wrapper .dataTables_processing {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 200px;
-    margin-left: -100px;
-    margin-top: -26px;
-    text-align: center;
-    padding: 1em 0;
-    background: white;
-    border: 1px solid #ddd;
-}
-</style>
-{% endblock %}
-
-{% block javascripts %}
-{{ parent() }}
-
-<!-- DataTables CSS & JS -->
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap.min.css">
-<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap.min.js"></script>
-
-<script>
-(function() {
-    'use strict';
-    
-    // Utiliser mQuery (alias jQuery de Mautic)
-    var $ = mQuery || jQuery;
-    
-    $(document).ready(function() {
-        console.log('Initializing campaigns DataTable...');
-        
-        // Initialiser DataTable
-        var table = $('#campaignsTable').DataTable({
-            processing: true,
-            serverSide: true,
-            ajax: {
-                url: '{{ path("warmup_campaign_ajax_list") }}',
-                type: 'GET',
-                error: function(xhr, error, code) {
-                    console.error('DataTables AJAX error:', error, code);
-                    console.error('Response:', xhr.responseText);
-                    alert('Error loading campaigns: ' + error);
-                }
-            },
-            columns: [
-                { 
-                    data: 'id',
-                    width: '50px'
-                },
-                { 
-                    data: 'campaignName',
-                    render: function(data, type, row) {
-                        return '<strong>' + data + '</strong>';
-                    }
-                },
-                { 
-                    data: 'status',
-                    width: '100px',
-                    render: function(data, type, row) {
-                        return '<span class="status-badge status-' + row.status + '">' + row.statusLabel + '</span>';
-                    }
-                },
-                { 
-                    data: 'totalContacts',
-                    width: '80px',
-                    className: 'text-center'
-                },
-                { 
-                    data: 'emailsSent',
-                    width: '80px',
-                    className: 'text-center'
-                },
-                { 
-                    data: 'startDate',
-                    width: '130px',
-                    className: 'text-center'
-                },
-                { 
-                    data: 'progress',
-                    width: '150px',
-                    render: function(data, type, row) {
-                        var percentage = parseInt(data) || 0;
-                        var barClass = 'progress-bar-success';
-                        
-                        if (percentage < 30) {
-                            barClass = 'progress-bar-danger';
-                        } else if (percentage < 70) {
-                            barClass = 'progress-bar-warning';
-                        }
-                        
-                        return '<div class="progress">' +
-                               '<div class="progress-bar ' + barClass + '" role="progressbar" ' +
-                               'style="width: ' + percentage + '%;" aria-valuenow="' + percentage + '" ' +
-                               'aria-valuemin="0" aria-valuemax="100">' +
-                               percentage + '%' +
-                               '</div></div>';
-                    }
-                },
-                { 
-                    data: 'actions',
-                    width: '120px',
-                    orderable: false,
-                    className: 'text-center',
-                    render: function(data, type, row) {
-                        return data;
-                    }
-                }
-            ],
-            order: [[0, 'desc']],
-            pageLength: 25,
-            lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
-            language: {
-                processing: "Loading campaigns...",
-                emptyTable: "No campaigns found",
-                zeroRecords: "No matching campaigns found",
-                info: "Showing _START_ to _END_ of _TOTAL_ campaigns",
-                infoEmpty: "Showing 0 to 0 of 0 campaigns",
-                infoFiltered: "(filtered from _MAX_ total campaigns)",
-                search: "Search:",
-                lengthMenu: "Show _MENU_ campaigns",
-                paginate: {
-                    first: "First",
-                    last: "Last",
-                    next: "Next",
-                    previous: "Previous"
-                }
-            },
-            drawCallback: function(settings) {
-                console.log('DataTable drawn with', settings.json ? settings.json.data.length : 0, 'rows');
-            }
-        });
-        
-        // Event handlers pour les boutons d'action
-        $('#campaignsTable').on('click', '.start-campaign', function(e) {
-            e.preventDefault();
-            var campaignId = $(this).data('id');
-            startCampaign(campaignId);
-        });
-        
-        $('#campaignsTable').on('click', '.pause-campaign', function(e) {
-            e.preventDefault();
-            var campaignId = $(this).data('id');
-            pauseCampaign(campaignId);
-        });
-        
-        $('#campaignsTable').on('click', '.resume-campaign', function(e) {
-            e.preventDefault();
-            var campaignId = $(this).data('id');
-            resumeCampaign(campaignId);
-        });
-        
-        // Fonctions AJAX pour les actions
-        function startCampaign(id) {
-            if (!confirm('Are you sure you want to start this campaign?')) {
-                return;
-            }
-            
-            executeAction(
-                '{{ path("warmup_campaign_start", {"id": "__ID__"}) }}'.replace('__ID__', id),
-                'Campaign started successfully!',
-                'Error starting campaign'
-            );
-        }
-        
-        function pauseCampaign(id) {
-            if (!confirm('Are you sure you want to pause this campaign?')) {
-                return;
-            }
-            
-            executeAction(
-                '{{ path("warmup_campaign_pause", {"id": "__ID__"}) }}'.replace('__ID__', id),
-                'Campaign paused successfully!',
-                'Error pausing campaign'
-            );
-        }
-        
-        function resumeCampaign(id) {
-            if (!confirm('Are you sure you want to resume this campaign?')) {
-                return;
-            }
-            
-            executeAction(
-                '{{ path("warmup_campaign_resume", {"id": "__ID__"}) }}'.replace('__ID__', id),
-                'Campaign resumed successfully!',
-                'Error resuming campaign'
-            );
-        }
-        
-        function executeAction(url, successMessage, errorMessage) {
-            $.ajax({
-                url: url,
-                type: 'POST',
-                dataType: 'json',
-                beforeSend: function() {
-                    // Optionnel: afficher un loader
-                },
-                success: function(response) {
-                    if (response.success) {
-                        showNotification(successMessage, 'success');
-                        table.ajax.reload(null, false); // Recharger sans revenir à la page 1
-                    } else {
-                        showNotification(response.message || errorMessage, 'error');
-                    }
-                },
-                error: function(xhr) {
-                    console.error('AJAX error:', xhr.responseText);
-                    showNotification(errorMessage + ': ' + xhr.statusText, 'error');
-                }
-            });
-        }
-        
-        function showNotification(message, type) {
-            var alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
-            var icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle';
-            
-            var notification = $(
-                '<div class="alert ' + alertClass + ' alert-dismissible" role="alert" ' +
-                'style="position: fixed; top: 70px; right: 20px; z-index: 9999; min-width: 300px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">' +
-                '<button type="button" class="close" data-dismiss="alert" aria-label="Close">' +
-                '<span aria-hidden="true">&times;</span>' +
-                '</button>' +
-                '<i class="fa ' + icon + '"></i> ' + message +
-                '</div>'
-            );
-            
-            $('body').append(notification);
-            
-            // Auto-hide après 5 secondes
-            setTimeout(function() {
-                notification.fadeOut(function() {
-                    $(this).remove();
-                });
-            }, 5000);
-        }
-    });
-})();
-</script>
+	 <script>
+		
+		// Fonction pour récupérer le token CSRF
+		function getCsrfToken() {
+		    return document.getElementById('csrf-token')?.value || '';
+		}
+		
+		document.addEventListener('DOMContentLoaded', function() {
+		    console.log('CSRF Token:', getCsrfToken()); // Debug
+		    console.log('🚀 Campaigns page loaded');
+		    initializeCampaignsList();
+		});
+		
+		document.addEventListener('DOMContentLoaded', function() {
+		    console.log('🚀 Campaigns page loaded');
+		    initializeCampaignsList();
+		});
+		
+		function initializeCampaignsList() {
+		    const config = {
+		        ajaxUrl: '{{ path("warmup_campaign_ajax_list") }}',
+		        editUrlTemplate: '{{ path("warmup_campaign_edit", {id: "__ID__"}) }}',
+		        startUrlTemplate: '{{ path("warmup_campaign_start", {id: "__ID__"}) }}',
+		        pauseUrlTemplate: '{{ path("warmup_campaign_pause", {id: "__ID__"}) }}',
+		        resumeUrlTemplate: '{{ path("warmup_campaign_resume", {id: "__ID__"}) }}',
+		        currentPage: 1,
+		        currentSearch: '',
+		        limit: 25
+		    };
+		    
+		    // Fonction utilitaire pour afficher les notifications
+		    function showNotification(message, type = 'success') {
+		        // Utiliser le système de notifications de Mautic si disponible
+		        if (typeof MauticVars !== 'undefined' && typeof MauticVars.showNotification === 'function') {
+		            MauticVars.showNotification(message, '', type, true);
+		        } else if (typeof mQuery !== 'undefined') {
+		            // Alternative avec mQuery (Mautic's jQuery)
+		            mQuery('#flashes').append(
+		                '<div class="alert alert-' + type + ' alert-dismissible">' +
+		                '<button type="button" class="close" data-dismiss="alert" aria-label="Close">' +
+		                '<span aria-hidden="true">&times;</span>' +
+		                '</button>' +
+		                message +
+		                '</div>'
+		            );
+		            
+		            // Auto-remove after 5 seconds
+		            setTimeout(function() {
+		                mQuery('#flashes .alert').last().fadeOut(500, function() {
+		                    mQuery(this).remove();
+		                });
+		            }, 5000);
+		        } else {
+		            // Fallback simple
+		            alert((type === 'error' ? 'Error: ' : '') + message);
+		        }
+		    }
+		    
+		function loadCampaigns(page, search) {
+		    page = page || 1;
+		    search = search || '';
+		    
+		    config.currentPage = page;
+		    config.currentSearch = search;
+		    
+		    // Afficher le loader
+		    document.getElementById('campaigns-tbody').innerHTML = `
+		        <tr><td colspan="7" class="text-center">
+		            <i class="ri-loader-2-line ri-spin ri-2x ri-fw"></i>
+		            <p class="mt-10">Loading campaigns...</p>
+		        </td></tr>
+		    `;
+		    
+		    const params = new URLSearchParams({
+		        'page': page,
+		        'limit': config.limit,
+		        'search': search
+		    });
+		    
+		    console.log('📡 Request URL:', config.ajaxUrl + '?' + params.toString());
+		    
+		    fetch(config.ajaxUrl + '?' + params.toString())
+		        .then(response => {
+		            console.log('Response status:', response.status);
+		            console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+		            
+		            // Essayer de lire le texte brut d'abord pour voir ce que retourne le serveur
+		            return response.text().then(text => {
+		                console.log('Raw response text:', text.substring(0, 500) + (text.length > 500 ? '...' : ''));
+		                
+		                // Essayer de parser en JSON
+		                try {
+		                    return JSON.parse(text);
+		                } catch (e) {
+		                    console.error('Failed to parse JSON:', e);
+		                    console.error('Raw text that failed to parse:', text);
+		                    
+		                    // Si ce n'est pas du JSON valide, c'est probablement une page HTML d'erreur
+		                    if (!response.ok) {
+		                        throw new Error(`HTTP ${response.status}. Server returned: ${text.substring(0, 200)}`);
+		                    }
+		                    
+		                    return { success: false, error: 'Invalid JSON response', raw: text };
+		                }
+		            });
+		        })
+		        .then(data => {
+		            console.log('✅ Parsed response data:', data);
+		            
+		            if (data.success === false) {
+		                throw new Error(data.error || data.message || data.raw || 'Unknown error from server');
+		            }
+		            
+		            if (!data.data) {
+		                console.warn('No data field in response:', data);
+		            }
+		            
+		            renderCampaigns(data.data || []);
+		            
+		            if (data.pagination) {
+		                renderPagination(
+		                    data.pagination.page || page,
+		                    data.pagination.limit || config.limit,
+		                    data.pagination.total || 0
+		                );
+		            }
+		        })
+		        .catch(error => {
+		            console.error('❌ AJAX Error:', error);
+		            console.error('Error stack:', error.stack);
+		            
+		            let errorMessage = error.message;
+		            let errorDetails = '';
+		            
+		            // Extraire plus de détails si possible
+		            if (error.cause) {
+		                errorDetails += `Cause: ${error.cause}\n`;
+		            }
+		            
+		            // Afficher l'erreur dans l'interface
+		            document.getElementById('campaigns-tbody').innerHTML = `
+		                <tr><td colspan="7" class="text-center text-danger">
+		                    <i class="ri-alert-line ri-3x mb-10 ri-fw"></i>
+		                    <p><strong>Error loading campaigns</strong></p>
+		                    <p class="text-sm">${escapeHtml(errorMessage)}</p>
+		                    <div class="mt-10">
+		                        <button class="btn btn-sm btn-default" onclick="window.open('${config.ajaxUrl}?${params.toString()}', '_blank')">
+		                            <i class="ri-external-link-line ri-fw"></i> Open URL in new tab
+		                        </button>
+		                        <button class="btn btn-sm btn-default" onclick="loadCampaigns(1, '')">
+		                            <i class="ri-refresh-line ri-fw"></i> Try Again
+		                        </button>
+		                        <button class="btn btn-sm btn-default" onclick="window.location.reload()">
+		                            <i class="ri-restart-line ri-fw"></i> Reload Page
+		                        </button>
+		                    </div>
+		                    <div class="mt-10">
+		                        <small class="text-muted">Check browser console (F12) for more details</small>
+		                    </div>
+		                </td></tr>
+		            `;
+		            
+		            // Cacher la pagination
+		            document.getElementById('pagination-container').innerHTML = '';
+		        });
+		}
+		    
+		    function renderCampaigns(campaigns) {
+		        console.log('📊 Rendering campaigns:', campaigns);
+		        
+		        let html = '';
+		        
+		        if (!campaigns || campaigns.length === 0) {
+		            html = `<tr><td colspan="7" class="text-center text-muted">
+		                <i class="ri-inbox-line ri-3x mb-10 ri-fw"></i>
+		                <p>{{ "No campaigns found"|trans }}</p>
+		                ${config.currentSearch ? '<p class="text-sm">{{ "Try a different search term"|trans }}</p>' : ''}
+		            </td></tr>`;
+		        } else {
+		            campaigns.forEach(campaign => {
+		                const editUrl = config.editUrlTemplate.replace('__ID__', campaign.id);
+		                const startUrl = config.startUrlTemplate.replace('__ID__', campaign.id);
+		                const pauseUrl = config.pauseUrlTemplate.replace('__ID__', campaign.id);
+		                const resumeUrl = config.resumeUrlTemplate.replace('__ID__', campaign.id);
+		                
+		                const statusLabel = getStatusLabel(campaign.status);
+		                const statusColor = getStatusColor(campaign.status);
+		                
+		                const progressBarClass = campaign.progress >= 90 ? 'progress-bar-success' : 
+		                                        campaign.progress >= 50 ? 'progress-bar-info' : 
+		                                        'progress-bar-warning';
+		                
+		                let actionButtons = '';
+		                
+		                // Edit button
+		                actionButtons += `<a href="${editUrl}" class="btn btn-xs btn-default" title="{{ "Edit"|trans }}">
+		                    <i class="ri-edit-line ri-fw"></i>
+		                </a>`;
+		                
+		                // Start button
+		                if (campaign.status === 'draft' || campaign.status === 'paused') {
+		                    actionButtons += `<button class="btn btn-xs btn-success start-campaign" 
+		                        data-id="${campaign.id}" 
+		                        data-url="${startUrl}"
+		                        title="{{ "Start"|trans }}">
+		                        <i class="ri-play-line ri-fw"></i>
+		                    </button>`;
+		                }
+		                
+		                // Pause button
+		                if (campaign.status === 'active') {
+		                    actionButtons += `<button class="btn btn-xs btn-warning pause-campaign" 
+		                        data-id="${campaign.id}" 
+		                        data-url="${pauseUrl}"
+		                        title="{{ "Pause"|trans }}">
+		                        <i class="ri-pause-line ri-fw"></i>
+		                    </button>`;
+		                }
+		                
+		                // Resume button (if paused)
+		                if (campaign.status === 'paused') {
+		                    actionButtons += `<button class="btn btn-xs btn-info resume-campaign" 
+		                        data-id="${campaign.id}" 
+		                        data-url="${resumeUrl}"
+		                        title="{{ "Resume"|trans }}">
+		                        <i class="ri-play-line ri-fw"></i>
+		                    </button>`;
+		                }
+		                
+		                html += `<tr>
+		                    <td>
+		                        <strong>${escapeHtml(campaign.campaignName || 'Untitled')}</strong>
+		                        ${campaign.description ? `<br><small class="text-muted">${escapeHtml(campaign.description)}</small>` : ''}
+		                    </td>
+		                    <td><span class="label label-${statusColor}">${statusLabel}</span></td>
+		                    <td><span class="badge">${campaign.totalContacts || 0}</span></td>
+		                    <td><span class="badge">${campaign.emailsSent || 0}</span></td>
+		                    <td>
+		                        <div class="progress" style="height: 8px; margin-bottom: 5px;">
+		                            <div class="progress-bar ${progressBarClass}" style="width: ${campaign.progress || 0}%"></div>
+		                        </div>
+		                        <small class="text-muted">${campaign.progress || 0}%</small>
+		                    </td>
+		                    <td><small>${campaign.startDate || '-'}</small></td>
+		                    <td class="text-right">
+		                        <div class="btn-group">${actionButtons}</div>
+		                    </td>
+		                </tr>`;
+		            });
+		        }
+		        
+		        document.getElementById('campaigns-tbody').innerHTML = html;
+		        attachCampaignEvents();
+		    }
+		    
+		    function escapeHtml(text) {
+		        if (!text) return '';
+		        const div = document.createElement('div');
+		        div.textContent = text;
+		        return div.innerHTML;
+		    }
+		    
+		    function getStatusLabel(status) {
+		        const labels = {
+		            'draft': '{{ "Draft"|trans }}',
+		            'active': '{{ "Active"|trans }}',
+		            'paused': '{{ "Paused"|trans }}',
+		            'completed': '{{ "Completed"|trans }}'
+		        };
+		        return labels[status] || status;
+		    }
+		    
+		    function getStatusColor(status) {
+		        const colors = {
+		            'draft': 'default',
+		            'active': 'success',
+		            'paused': 'warning',
+		            'completed': 'info'
+		        };
+		        return colors[status] || 'default';
+		    }
+		    
+		    function showError(message) {
+		        document.getElementById('campaigns-tbody').innerHTML = `
+		            <tr><td colspan="7" class="text-center text-danger">
+		                <i class="ri-alert-line ri-3x mb-10 ri-fw"></i>
+		                <p><strong>${message}</strong></p>
+		                <button class="btn btn-sm btn-default" onclick="window.location.reload()">
+		                    <i class="ri-refresh-line ri-fw"></i> {{ "Reload page"|trans }}
+		                </button>
+		            </td></tr>
+		        `;
+		    }
+		    
+		    function renderPagination(currentPage, limit, total) {
+		        const totalPages = Math.ceil(total / limit);
+		        let html = '';
+		        
+		        if (totalPages > 1) {
+		            html = '<ul class="pagination pagination-sm">';
+		            
+		            // Bouton précédent
+		            if (currentPage > 1) {
+		                html += `<li><a href="#" class="page-link" data-page="${currentPage - 1}">
+		                    <i class="ri-arrow-left-s-line ri-fw"></i></a></li>`;
+		            } else {
+		                html += '<li class="disabled"><span><i class="ri-arrow-left-s-line ri-fw"></i></span></li>';
+		            }
+		            
+		            // Pages
+		            const startPage = Math.max(1, currentPage - 2);
+		            const endPage = Math.min(totalPages, currentPage + 2);
+		            
+		            if (startPage > 1) {
+		                html += `<li><a href="#" class="page-link" data-page="1">1</a></li>`;
+		                if (startPage > 2) {
+		                    html += '<li class="disabled"><span>...</span></li>';
+		                }
+		            }
+		            
+		            for (let i = startPage; i <= endPage; i++) {
+		                if (i === currentPage) {
+		                    html += `<li class="active"><span>${i}</span></li>`;
+		                } else {
+		                    html += `<li><a href="#" class="page-link" data-page="${i}">${i}</a></li>`;
+		                }
+		            }
+		            
+		            if (endPage < totalPages) {
+		                if (endPage < totalPages - 1) {
+		                    html += '<li class="disabled"><span>...</span></li>';
+		                }
+		                html += `<li><a href="#" class="page-link" data-page="${totalPages}">${totalPages}</a></li>`;
+		            }
+		            
+		            // Bouton suivant
+		            if (currentPage < totalPages) {
+		                html += `<li><a href="#" class="page-link" data-page="${currentPage + 1}">
+		                    <i class="ri-arrow-right-s-line ri-fw"></i></a></li>`;
+		            } else {
+		                html += '<li class="disabled"><span><i class="ri-arrow-right-s-line ri-fw"></i></span></li>';
+		            }
+		            
+		            html += '</ul>';
+		            
+		            const start = ((currentPage - 1) * limit) + 1;
+		            const end = Math.min(currentPage * limit, total);
+		            html += `<p class="text-muted text-center mt-10">
+		                {{ "Showing"|trans }} ${start} - ${end} {{ "of"|trans }} ${total} {{ "campaigns"|trans }}
+		            </p>`;
+		        }
+		        
+		        document.getElementById('pagination-container').innerHTML = html;
+		        
+		        // Événements de pagination
+		        document.querySelectorAll('.page-link').forEach(link => {
+		            link.addEventListener('click', function(e) {
+		                e.preventDefault();
+		                const page = this.dataset.page;
+		                if (page) {
+		                    loadCampaigns(page, config.currentSearch);
+		                }
+		            });
+		        });
+		    }
+		    
+		    function attachCampaignEvents() {
+		        // Démarrer une campagne
+		        document.querySelectorAll('.start-campaign').forEach(button => {
+		            button.addEventListener('click', function() {
+		                const campaignId = this.dataset.id;
+		                const startUrl = this.dataset.url;
+		                startCampaign(campaignId, startUrl);
+		            });
+		        });
+		        
+		        // Mettre en pause une campagne
+		        document.querySelectorAll('.pause-campaign').forEach(button => {
+		            button.addEventListener('click', function() {
+		                const campaignId = this.dataset.id;
+		                const pauseUrl = this.dataset.url;
+		                pauseCampaign(campaignId, pauseUrl);
+		            });
+		        });
+		        
+		        // Reprendre une campagne
+		        document.querySelectorAll('.resume-campaign').forEach(button => {
+		            button.addEventListener('click', function() {
+		                const campaignId = this.dataset.id;
+		                const resumeUrl = this.dataset.url;
+		                resumeCampaign(campaignId, resumeUrl);
+		            });
+		        });
+		    }
+		
+		function startCampaign(campaignId, startUrl) {
+		    if (!confirm('{{ "Are you sure you want to start this campaign?"|trans }}')) {
+		        return;
+		    }
+		    
+		    const token = getCsrfToken();
+		    
+		    fetch(startUrl, {
+		        method: 'POST',
+		        headers: {
+		            'Content-Type': 'application/x-www-form-urlencoded',
+		        },
+		        body: `_token=${encodeURIComponent(token)}`
+		    })
+		    .then(response => response.json())
+		    .then(data => {
+		        if (data.success) {
+		            showNotification(data.message, 'success');
+		            loadCampaigns(config.currentPage, config.currentSearch);
+		        } else {
+		            showNotification(data.message || 'Error starting campaign', 'error');
+		        }
+		    })
+		    .catch(error => {
+		        console.error('Error:', error);
+		        showNotification('Error starting campaign', 'error');
+		    });
+		}
+		
+		function tryAlternativeApproach(campaignId, startUrl) {
+		    console.log('Trying alternative approach...');
+		    
+		    // Option 2: Utiliser URLSearchParams (application/x-www-form-urlencoded)
+		    const params = new URLSearchParams();
+		    params.append('action', 'start');
+		    params.append('campaignId', campaignId);
+		    
+		    // Ajouter le token CSRF trouvé précédemment
+		    const tokenInput = document.querySelector('input[name="mautic_csrf_token"]') || 
+		                      document.querySelector('input[name="_csrf_token"]');
+		    
+		    if (tokenInput) {
+		        params.append(tokenInput.name, tokenInput.value);
+		        console.log('Using token from:', tokenInput.name);
+		    }
+		    
+		    fetch(startUrl, {
+		        method: 'POST',
+		        headers: {
+		            'Content-Type': 'application/x-www-form-urlencoded',
+		            'X-Requested-With': 'XMLHttpRequest'
+		        },
+		        body: params.toString()
+		    })
+		    .then(response => response.json())
+		    .then(data => {
+		        console.log('Alternative response:', data);
+		        if (data.success) {
+		            showNotification(data.message, 'success');
+		            loadCampaigns(config.currentPage, config.currentSearch);
+		        }
+		    })
+		    .catch(error => {
+		        console.error('Alternative approach also failed:', error);
+		        
+		        // Option 3: Dernier recours - requête GET (moins sécurisée)
+		        fetch(startUrl + '?action=start&id=' + campaignId + '&force=1')
+		            .then(r => r.json())
+		            .then(data => {
+		                console.log('GET response:', data);
+		                if (data.success) {
+		                    showNotification('Campaign started (GET method)', 'success');
+		                    loadCampaigns(config.currentPage, config.currentSearch);
+		                }
+		            });
+		    });
+		}
+		    
+		  function pauseCampaign(campaignId, pauseUrl) {
+		    if (!confirm('{{ "Are you sure you want to pause this campaign?"|trans }}')) {
+		        return;
+		    }
+		    
+		    console.log('⏸️ Pausing campaign ID:', campaignId);
+		    
+		    const pauseBtn = document.querySelector(`.pause-campaign[data-id="${campaignId}"]`);
+		    if (pauseBtn) {
+		        const originalHTML = pauseBtn.innerHTML;
+		        pauseBtn.innerHTML = '<i class="ri-loader-2-line ri-spin ri-fw"></i>';
+		        pauseBtn.disabled = true;
+		    }
+		    
+		    fetch(pauseUrl, {
+		        method: 'POST',
+		         headers: {
+		            'Content-Type': 'application/x-www-form-urlencoded',
+		        },
+		        body: `_token=${encodeURIComponent(token)}`
+		    })
+		    .then(response => {
+		        console.log('Pause response status:', response.status);
+		        return response.json();
+		    })
+		    .then(data => {
+		        console.log('Pause response data:', data);
+		        
+		        if (data.success) {
+		            showNotification(data.message, 'success');
+		            loadCampaigns(config.currentPage, config.currentSearch);
+		        } else {
+		            const errorMsg = data.message || data.error || '{{ "Error pausing campaign"|trans }}';
+		            showNotification(errorMsg, 'error');
+		        }
+		    })
+		    .catch(error => {
+		        console.error('❌ Pause campaign error:', error);
+		        showNotification('{{ "Error pausing campaign"|trans }}', 'error');
+		    })
+		    .finally(() => {
+		        if (pauseBtn) {
+		            pauseBtn.innerHTML = '<i class="ri-pause-line ri-fw"></i>';
+		            pauseBtn.disabled = false;
+		        }
+		    });
+		}
+		
+		function resumeCampaign(campaignId, resumeUrl) {
+		    if (!confirm('{{ "Are you sure you want to resume this campaign?"|trans }}')) {
+		        return;
+		    }
+		    
+		    console.log('▶️ Resuming campaign ID:', campaignId);
+		    
+		    const resumeBtn = document.querySelector(`.resume-campaign[data-id="${campaignId}"]`);
+		    if (resumeBtn) {
+		        const originalHTML = resumeBtn.innerHTML;
+		        resumeBtn.innerHTML = '<i class="ri-loader-2-line ri-spin ri-fw"></i>';
+		        resumeBtn.disabled = true;
+		    }
+		    
+		    fetch(resumeUrl, {
+		        method: 'POST',
+		        headers: {
+		            'Content-Type': 'application/json',
+		            'X-Requested-With': 'XMLHttpRequest'
+		        },
+		        credentials: 'same-origin'
+		    })
+		    .then(response => {
+		        console.log('Resume response status:', response.status);
+		        return response.json();
+		    })
+		    .then(data => {
+		        console.log('Resume response data:', data);
+		        
+		        if (data.success) {
+		            showNotification(data.message, 'success');
+		            loadCampaigns(config.currentPage, config.currentSearch);
+		        } else {
+		            const errorMsg = data.message || data.error || '{{ "Error resuming campaign"|trans }}';
+		            showNotification(errorMsg, 'error');
+		        }
+		    })
+		    .catch(error => {
+		        console.error('❌ Resume campaign error:', error);
+		        showNotification('{{ "Error resuming campaign"|trans }}', 'error');
+		    })
+		    .finally(() => {
+		        if (resumeBtn) {
+		            resumeBtn.innerHTML = '<i class="ri-play-line ri-fw"></i>';
+		            resumeBtn.disabled = false;
+		        }
+		    });
+		}
+		    
+		    // Événements de recherche
+		    document.getElementById('search-btn').addEventListener('click', function() {
+		        const search = document.getElementById('search-input').value;
+		        loadCampaigns(1, search);
+		    });
+		    
+		    document.getElementById('search-input').addEventListener('keypress', function(e) {
+		        if (e.key === 'Enter') {
+		            e.preventDefault();
+		            const search = this.value;
+		            loadCampaigns(1, search);
+		        }
+		    });
+		    
+		    // Charger les campagnes au démarrage
+		    console.log('🚀 Initializing campaigns list...');
+		    loadCampaigns(1, '');
+		}
+		</script>
 {% endblock %}

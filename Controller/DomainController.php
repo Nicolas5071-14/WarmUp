@@ -2,65 +2,36 @@
 
 namespace MauticPlugin\MauticWarmUpBundle\Controller;
 
-use Doctrine\ORM\EntityManagerInterface;
+use Mautic\CoreBundle\Controller\CommonController;
 use MauticPlugin\MauticWarmUpBundle\Entity\Domain;
 use MauticPlugin\MauticWarmUpBundle\Form\Type\DomainType;
-use MauticPlugin\MauticWarmUpBundle\Model\DomainModel;
-use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
-use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\Session\SessionInterface;
-use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
-use Symfony\Component\HttpFoundation\RequestStack;
-use Twig\Environment;
+use Symfony\Contracts\Service\ServiceSubscriberInterface;
 
-class DomainController
+class DomainController extends CommonController
 {
-    private EntityManagerInterface $em;
-    private DomainModel $domainModel;
-    private FormFactoryInterface $formFactory;
-    private UrlGeneratorInterface $router;
-    private RequestStack $requestStack;
-    private Environment $twig;
-
-    public function __construct(
-        EntityManagerInterface $em,
-        DomainModel $domainModel,
-        FormFactoryInterface $formFactory,
-        UrlGeneratorInterface $router,
-        RequestStack $requestStack,
-        Environment $twig
-    ) {
-        $this->em = $em;
-        $this->domainModel = $domainModel;
-        $this->formFactory = $formFactory;
-        $this->router = $router;
-        $this->requestStack = $requestStack;
-        $this->twig = $twig;
-    }
-
     /**
-     * Helper method to get session from request stack
+     * Returns the services this controller needs
      */
 
-
-    private function getSession(): SessionInterface
-    {
-        return $this->requestStack->getSession();
-    }
-
     /**
-     * List domains
+     * List domains - Compatible avec navigation AJAX Mautic
      */
     public function indexAction(Request $request): Response
     {
-        return new Response(
-            $this->twig->render('@MauticWarmUp/Domain/index.html.twig', [
-                'tmpl' => 'index',
-            ])
-        );
+        return $this->delegateView([
+            'viewParameters' => [
+                'tmpl' => $request->get('tmpl', 'index'),
+            ],
+            'contentTemplate' => '@MauticWarmUp/Domain/index.html.twig',
+            'passthroughVars' => [
+                'activeLink' => '#warmup_domain_index',
+                'mauticContent' => 'warmupDomain',
+                'route' => $this->generateUrl('warmup_domain_index'),
+            ]
+        ]);
     }
 
     /**
@@ -71,6 +42,8 @@ class DomainController
         error_log('🔥 ajaxListAction CALLED');
 
         try {
+            $domainModel = $this->get('mautic_warmup.model.domain');
+
             $page = max(1, (int) $request->query->get('page', 1));
             $limit = max(1, min(100, (int) $request->query->get('limit', 25)));
             $search = trim((string) $request->query->get('search', ''));
@@ -94,16 +67,12 @@ class DomainController
 
             error_log('📦 Calling DomainModel::getEntities with: ' . json_encode($params));
 
-            $domains = $this->domainModel->getEntities($params);
+            $domains = $domainModel->getEntities($params);
+            $totalCount = $domainModel->getTotalCount();
 
-            error_log('📊 Domains RAW result count: ' . count($domains));
-            error_log('📊 Domains RAW: ' . print_r($domains, true));
-
-            $totalCount = $this->domainModel->getTotalCount();
             error_log('📊 Total count: ' . $totalCount);
 
             $data = [];
-
             foreach ($domains as $domain) {
                 $data[] = [
                     'id' => $domain['id'],
@@ -121,8 +90,6 @@ class DomainController
                         : null,
                 ];
             }
-
-            error_log('✅ JSON DATA FINAL: ' . json_encode($data));
 
             return new JsonResponse([
                 'success' => true,
@@ -148,152 +115,156 @@ class DomainController
     }
 
     /**
-     * New domain
+     * New domain - Compatible AJAX
      */
-
-
     public function newAction(Request $request): Response
     {
+        $domainModel = $this->get('mautic_warmup.model.domain');
         $domain = new Domain();
-        $actionUrl = $this->router->generate('warmup_domain_new');
 
-        $form = $this->formFactory->create(DomainType::class, $domain, [
+        $actionUrl = $this->generateUrl('warmup_domain_new');
+
+        $form = $this->createForm(DomainType::class, $domain, [
             'action' => $actionUrl,
             'method' => 'POST',
         ]);
 
         $form->handleRequest($request);
 
+        error_log('=== NEW DOMAIN ACTION ===');
+        error_log('Form submitted: ' . ($form->isSubmitted() ? 'Yes' : 'No'));
+        error_log('Form valid: ' . ($form->isValid() ? 'Yes' : 'No'));
+
         if ($form->isSubmitted() && $form->isValid()) {
-            if ($this->domainModel->checkIfDomainExists($domain->getDomainName())) {
-                // Utiliser 'error' au lieu de 'success'
-                $this->getSession()->getFlashBag()->add(
-                    'error',
-                    'Domain already exists: ' . $domain->getDomainName()
+            if ($domainModel->checkIfDomainExists($domain->getDomainName())) {
+                $this->addFlashMessage(
+                    'Domain already exists: ' . $domain->getDomainName(),
+                    [],
+                    'error'
                 );
 
-                return new Response(
-                    $this->twig->render('@MauticWarmUp/Domain/form.html.twig', [
+                return $this->delegateView([
+                    'viewParameters' => [
                         'form' => $form->createView(),
                         'domain' => $domain,
                         'actionUrl' => $actionUrl,
-                    ])
-                );
+                    ],
+                    'contentTemplate' => '@MauticWarmUp/Domain/form.html.twig',
+                    'passthroughVars' => [
+                        'activeLink' => '#warmup_domain_new',
+                        'mauticContent' => 'warmupDomain',
+                        'route' => $this->generateUrl('warmup_domain_new'),
+                    ]
+                ]);
             }
 
             try {
-                $this->domainModel->saveEntity($domain);
+                $domainModel->saveEntity($domain);
 
-                // Utiliser 'notice' pour les succès
-                $this->getSession()->getFlashBag()->add(
-                    'notice',
-                    'Domain created successfully'
-                );
+                $this->addFlashMessage('Domain created successfully');
 
-                return new RedirectResponse(
-                    $this->router->generate('warmup_domain_index')
-                );
+                return $this->postActionRedirect([
+                    'returnUrl' => $this->generateUrl('warmup_domain_index'),
+                    'contentTemplate' => '@MauticWarmUp/Domain/index.html.twig',
+                    'passthroughVars' => [
+                        'activeLink' => '#warmup_domain_index',
+                        'mauticContent' => 'warmupDomain',
+                    ]
+                ]);
 
             } catch (\Exception $e) {
-                $this->getSession()->getFlashBag()->add(
-                    'error',
-                    $e->getMessage()
-                );
+                $this->addFlashMessage($e->getMessage(), [], 'error');
+                error_log('Save error: ' . $e->getMessage());
             }
         }
 
-        return $this->delegateView(
-            [
-                'viewParameters' => [
-                    'form' => $form->createView(),
-                    'domain' => $domain,
-                    'actionUrl' => $actionUrl,
-                ],
-                'contentTemplate' => '@MauticWarmUp/Domain/form.html.twig',
+        return $this->delegateView([
+            'viewParameters' => [
+                'form' => $form->createView(),
+                'domain' => $domain,
+                'actionUrl' => $actionUrl,
             ],
-            $request
-        );
-    }
-
-
-    private function delegateView(array $params, ?Request $request = null): Response
-    {
-        $viewParameters = $params['viewParameters'] ?? [];
-        $contentTemplate = $params['contentTemplate'] ?? '';
-
-        if (empty($contentTemplate)) {
-            throw new \InvalidArgumentException('contentTemplate is required');
-        }
-
-        return new Response(
-            $this->twig->render($contentTemplate, array_merge(
-                $viewParameters,
-                [
-                    // Mautic layout system
-                    'tmpl' => $request->isXmlHttpRequest()
-                        ? $request->get('tmpl', 'index')
-                        : 'index',
-
-                    // Permissions (safe fallback)
-                    'permissions' => [
-                        'warmup:domains:view' => true,
-                        'warmup:domains:create' => true,
-                        'warmup:domains:edit' => true,
-                        'warmup:domains:delete' => true,
-                    ],
-                ]
-            ))
-        );
+            'contentTemplate' => '@MauticWarmUp/Domain/form.html.twig',
+            'passthroughVars' => [
+                'activeLink' => '#warmup_domain_new',
+                'mauticContent' => 'warmupDomain',
+                'route' => $this->generateUrl('warmup_domain_new'),
+            ]
+        ]);
     }
 
     /**
-     * Edit domain
+     * Edit domain - Compatible AJAX
      */
     public function editAction(Request $request, int $id): Response
     {
-        $domain = $this->domainModel->getEntity($id);
+        $domainModel = $this->get('mautic_warmup.model.domain');
+        $domain = $domainModel->getEntity($id);
 
         if (!$domain) {
-            $this->getSession()->getFlashBag()->add('error', 'Domain not found');
-            return new RedirectResponse($this->router->generate('warmup_domain_index'));
+            $this->addFlashMessage('Domain not found', [], 'error');
+
+            return $this->postActionRedirect([
+                'returnUrl' => $this->generateUrl('warmup_domain_index'),
+                'contentTemplate' => '@MauticWarmUp/Domain/index.html.twig',
+                'passthroughVars' => [
+                    'activeLink' => '#warmup_domain_index',
+                    'mauticContent' => 'warmupDomain',
+                ]
+            ]);
         }
 
-        $actionUrl = $this->router->generate('warmup_domain_edit', ['id' => $id]);
-        $form = $this->formFactory->create(DomainType::class, $domain, [
+        $actionUrl = $this->generateUrl('warmup_domain_edit', ['id' => $id]);
+
+        $form = $this->createForm(DomainType::class, $domain, [
             'action' => $actionUrl,
             'method' => 'POST',
-            'csrf_protection' => false, // Désactivez CSRF temporairement pour tester
         ]);
 
         $form->handleRequest($request);
 
         if ($form->isSubmitted() && $form->isValid()) {
             try {
-                $this->domainModel->saveEntity($domain);
+                $domainModel->saveEntity($domain);
 
-                $this->getSession()->getFlashBag()->add('success', 'Domain updated successfully');
+                $this->addFlashMessage('Domain updated successfully');
 
-                return new RedirectResponse($this->router->generate('warmup_domain_index'));
+                return $this->postActionRedirect([
+                    'returnUrl' => $this->generateUrl('warmup_domain_index'),
+                    'contentTemplate' => '@MauticWarmUp/Domain/index.html.twig',
+                    'passthroughVars' => [
+                        'activeLink' => '#warmup_domain_index',
+                        'mauticContent' => 'warmupDomain',
+                    ]
+                ]);
+
             } catch (\Exception $e) {
-                $this->getSession()->getFlashBag()->add('error', 'Error: ' . $e->getMessage());
+                $this->addFlashMessage('Error: ' . $e->getMessage(), [], 'error');
             }
         }
 
-        return new Response(
-            $this->twig->render('@MauticWarmUp/Domain/form.html.twig', [
+        return $this->delegateView([
+            'viewParameters' => [
                 'form' => $form->createView(),
                 'domain' => $domain,
                 'actionUrl' => $actionUrl,
-            ])
-        );
+            ],
+            'contentTemplate' => '@MauticWarmUp/Domain/form.html.twig',
+            'passthroughVars' => [
+                'activeLink' => '#warmup_domain_edit',
+                'mauticContent' => 'warmupDomain',
+                'route' => $this->generateUrl('warmup_domain_edit', ['id' => $id]),
+            ]
+        ]);
     }
 
     /**
      * Delete domain
      */
-    public function deleteAction(Request $request, int $id): Response
+    public function deleteAction(Request $request, int $id): JsonResponse
     {
-        $domain = $this->domainModel->getEntity($id);
+        $domainModel = $this->get('mautic_warmup.model.domain');
+        $domain = $domainModel->getEntity($id);
 
         if (!$domain) {
             return new JsonResponse(['success' => false, 'error' => 'Domain not found'], 404);
@@ -301,9 +272,10 @@ class DomainController
 
         if ($request->isMethod('POST')) {
             try {
-                $this->domainModel->deleteEntity($domain);
+                $domainModel->deleteEntity($domain);
 
-                $this->getSession()->getFlashBag()->add('success', 'Domain deleted successfully');
+                $this->addFlashMessage('Domain deleted successfully');
+
                 return new JsonResponse(['success' => true, 'message' => 'Domain deleted']);
             } catch (\Exception $e) {
                 return new JsonResponse(['success' => false, 'error' => $e->getMessage()], 500);
@@ -319,33 +291,27 @@ class DomainController
             'confirmation' => 'Are you sure you want to delete this domain?',
         ]);
     }
+
     /**
      * Verify domain SMTP
      */
     public function verifyAction(Request $request, int $id): JsonResponse
     {
-        $domain = $this->domainModel->getEntity($id);
+        $domainModel = $this->get('mautic_warmup.model.domain');
+        $domain = $domainModel->getEntity($id);
 
         if (!$domain) {
             return new JsonResponse(['success' => false, 'message' => 'Domain not found'], 404);
         }
 
         try {
-            $verified = $this->domainModel->verifySmtp($domain);
+            $verified = $domainModel->verifySmtp($domain);
 
-            if ($verified) {
-                return new JsonResponse([
-                    'success' => true,
-                    'message' => 'SMTP verification successful',
-                    'isVerified' => true,
-                ]);
-            } else {
-                return new JsonResponse([
-                    'success' => false,
-                    'message' => 'SMTP verification failed. Please check your credentials.',
-                    'isVerified' => false,
-                ]);
-            }
+            return new JsonResponse([
+                'success' => $verified,
+                'message' => $verified ? 'SMTP verification successful' : 'SMTP verification failed',
+                'isVerified' => $verified,
+            ]);
         } catch (\Exception $e) {
             return new JsonResponse([
                 'success' => false,
@@ -360,7 +326,8 @@ class DomainController
      */
     public function toggleActiveAction(Request $request, int $id): JsonResponse
     {
-        $domain = $this->domainModel->getEntity($id);
+        $domainModel = $this->get('mautic_warmup.model.domain');
+        $domain = $domainModel->getEntity($id);
 
         if (!$domain) {
             return new JsonResponse(['success' => false, 'message' => 'Domain not found'], 404);
@@ -369,7 +336,7 @@ class DomainController
         try {
             $newStatus = !$domain->isActive();
             $domain->setIsActive($newStatus);
-            $this->domainModel->saveEntity($domain);
+            $domainModel->saveEntity($domain);
 
             return new JsonResponse([
                 'success' => true,
@@ -389,13 +356,14 @@ class DomainController
      */
     public function statsAction(Request $request, int $id): JsonResponse
     {
-        $domain = $this->domainModel->getEntity($id);
+        $domainModel = $this->get('mautic_warmup.model.domain');
+        $domain = $domainModel->getEntity($id);
 
         if (!$domain) {
             return new JsonResponse(['success' => false, 'message' => 'Domain not found'], 404);
         }
 
-        $stats = $this->domainModel->getStatistics($domain);
+        $stats = $domainModel->getStatistics($domain);
 
         return new JsonResponse([
             'success' => true,
@@ -404,98 +372,15 @@ class DomainController
     }
 
     /**
-     * Start warm-up for domain
-     */
-    public function startWarmupAction(Request $request, int $id): JsonResponse
-    {
-        $domain = $this->domainModel->getEntity($id);
-
-        if (!$domain) {
-            return new JsonResponse(['success' => false, 'message' => 'Domain not found'], 404);
-        }
-
-        try {
-            $this->domainModel->startWarmUp($domain);
-
-            return new JsonResponse([
-                'success' => true,
-                'message' => 'Warm-up started successfully',
-                'isActive' => true,
-                'warmupStartDate' => $domain->getWarmupStartDate() ? $domain->getWarmupStartDate()->format('Y-m-d H:i:s') : null,
-            ]);
-        } catch (\Exception $e) {
-            return new JsonResponse([
-                'success' => false,
-                'message' => 'Error starting warm-up: ' . $e->getMessage(),
-            ]);
-        }
-    }
-
-    /**
-     * Pause warm-up for domain
-     */
-    public function pauseWarmupAction(Request $request, int $id): JsonResponse
-    {
-        $domain = $this->domainModel->getEntity($id);
-
-        if (!$domain) {
-            return new JsonResponse(['success' => false, 'message' => 'Domain not found'], 404);
-        }
-
-        try {
-            $this->domainModel->pauseWarmUp($domain);
-
-            return new JsonResponse([
-                'success' => true,
-                'message' => 'Warm-up paused',
-                'isActive' => false,
-            ]);
-        } catch (\Exception $e) {
-            return new JsonResponse([
-                'success' => false,
-                'message' => 'Error pausing warm-up: ' . $e->getMessage(),
-            ]);
-        }
-    }
-
-    /**
-     * Reset domain daily counter
-     */
-    public function resetDailyCounterAction(Request $request, int $id): JsonResponse
-    {
-        $domain = $this->domainModel->getEntity($id);
-
-        if (!$domain) {
-            return new JsonResponse(['success' => false, 'message' => 'Domain not found'], 404);
-        }
-
-        try {
-            $domain->setTotalSentToday(0);
-            $domain->setUpdatedAt(new \DateTime());
-            $this->domainModel->saveEntity($domain);
-
-            return new JsonResponse([
-                'success' => true,
-                'message' => 'Daily counter reset',
-                'totalSentToday' => 0,
-            ]);
-        } catch (\Exception $e) {
-            return new JsonResponse([
-                'success' => false,
-                'message' => 'Error resetting counter: ' . $e->getMessage(),
-            ]);
-        }
-    }
-
-    /**
-     * Get domains with available capacity
+     * Get available domains
      */
     public function availableDomainsAction(Request $request): JsonResponse
     {
+        $domainModel = $this->get('mautic_warmup.model.domain');
         $requiredCount = $request->query->get('required', 1);
 
         try {
-            $domains = $this->domainModel->getDomainsWithCapacity((int) $requiredCount);
+            $domains = $domainModel->getDomainsWithCapacity((int) $requiredCount);
 
             $result = [];
             foreach ($domains as $domain) {
@@ -523,4 +408,5 @@ class DomainController
             ]);
         }
     }
+
 }

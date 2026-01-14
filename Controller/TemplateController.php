@@ -327,4 +327,69 @@ class TemplateController
             'count' => count($result),
         ]);
     }
+
+    /**
+     * Liste des templates (AJAX)
+     */
+    public function listAction(Request $request): JsonResponse
+    {
+        try {
+            $templates = $this->em->getRepository(Template::class)
+                ->findBy(['isActive' => true], ['name' => 'ASC']);
+
+            $data = [];
+            foreach ($templates as $template) {
+                $data[] = [
+                    'id' => $template->getId(),
+                    'name' => $template->getName(),
+                    'description' => $template->getDescription(),
+                    'subject' => $template->getSubject(),
+                    'content' => $template->getContent(),
+                    'created_at' => $template->getCreatedAt() ? $template->getCreatedAt()->format('Y-m-d H:i') : null,
+                ];
+            }
+
+            return new JsonResponse([
+                'success' => true,
+                'templates' => $data,
+            ]);
+
+        } catch (\Exception $e) {
+            error_log('Error in listAction: ' . $e->getMessage());
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Error loading templates: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Charger un template spécifique (AJAX)
+     */
+    public function loadAction(Request $request, int $id): JsonResponse
+    {
+        try {
+            $template = $this->em->getRepository(Template::class)->find($id);
+
+            if (!$template) {
+                throw new \Exception('Template not found');
+            }
+
+            return new JsonResponse([
+                'success' => true,
+                'template' => [
+                    'id' => $template->getId(),
+                    'name' => $template->getName(),
+                    'subject' => $template->getSubject(),
+                    'content' => $template->getContent(),
+                ],
+            ]);
+
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 400);
+        }
+    }
 }

@@ -59,14 +59,14 @@ class MauticWarmUpBundle extends PluginBundleBase
             $table = $schema->createTable('warmup_campaigns');
 
             $table->addColumn('id', 'integer', ['autoincrement' => true]);
-            $table->addColumn('campaign_name', 'string', ['length' => 255]);
+            $table->addColumn('campaignName', 'string', ['length' => 255]);
             $table->addColumn('description', 'text', ['notnull' => false]);
             $table->addColumn('warmup_type_id', 'integer', ['default' => 1]);
             $table->addColumn('domain_id', 'integer', ['notnull' => false]);
-            $table->addColumn('start_date', 'datetime', ['notnull' => false]);
+            $table->addColumn('startDate', 'datetime', ['notnull' => false]);
             $table->addColumn('status', 'string', ['length' => 20, 'default' => 'draft']);
-            $table->addColumn('total_contacts', 'integer', ['default' => 0]);
-            $table->addColumn('emails_sent', 'integer', ['default' => 0]);
+            $table->addColumn('totalContacts', 'integer', ['default' => 0]);
+            $table->addColumn('emailsSent', 'integer', ['default' => 0]);
             $table->addColumn('createdAt', 'datetime');
             $table->addColumn('updatedAt', 'datetime');
 
@@ -151,30 +151,30 @@ class MauticWarmUpBundle extends PluginBundleBase
 
             $table->addColumn('id', 'integer', ['autoincrement' => true]);
             $table->addColumn('campaign_id', 'integer');
-            $table->addColumn('email_address', 'string', ['length' => 255]);
-            $table->addColumn('first_name', 'string', ['length' => 100, 'notnull' => false]);
-            $table->addColumn('last_name', 'string', ['length' => 100, 'notnull' => false]);
-            $table->addColumn('sequence_day', 'integer', ['default' => 1]);
-            $table->addColumn('days_between_emails', 'integer', ['default' => 2]);
-            $table->addColumn('last_sent', 'datetime', ['notnull' => false]);
-            $table->addColumn('next_send_date', 'datetime', ['notnull' => false]);
-            $table->addColumn('sent_count', 'integer', ['default' => 0]);
-            $table->addColumn('is_active', 'boolean', ['default' => true]);
-            $table->addColumn('unsubscribe_token', 'string', ['length' => 64, 'notnull' => false]);
+            $table->addColumn('emailAddress', 'string', ['length' => 255]);
+            $table->addColumn('firstName', 'string', ['length' => 100, 'notnull' => false]);
+            $table->addColumn('lastName', 'string', ['length' => 100, 'notnull' => false]);
+            $table->addColumn('sequenceDay', 'integer', ['default' => 1]);
+            $table->addColumn('daysBetweenEmails', 'integer', ['default' => 2]);
+            $table->addColumn('lastSent', 'datetime', ['notnull' => false]);
+            $table->addColumn('nextSendDate', 'datetime', ['notnull' => false]);
+            $table->addColumn('sentCount', 'integer', ['default' => 0]);
+            $table->addColumn('isActive', 'boolean', ['default' => true]);
+            $table->addColumn('unsubscribeToken', 'string', ['length' => 64, 'notnull' => false]);
             $table->addColumn('createdAt', 'datetime');
 
             $table->setPrimaryKey(['id']);
             $table->addForeignKeyConstraint('warmup_campaigns', ['campaign_id'], ['id']);
             $table->addIndex(['campaign_id'], 'idx_campaign');
-            $table->addIndex(['email_address'], 'idx_email');
-            $table->addIndex(['next_send_date'], 'idx_next_send');
+            $table->addIndex(['emailAddress'], 'idx_email');
+            $table->addIndex(['nextSendDate'], 'idx_next_send');
         }
 
         if (!$schema->hasTable('warmup_types')) {
             $table = $schema->createTable('warmup_types');
 
             $table->addColumn('id', 'integer', ['autoincrement' => true]);
-            $table->addColumn('type_name', 'string', ['length' => 100]);
+            $table->addColumn('typeName', 'string', ['length' => 100]);
             $table->addColumn('description', 'text', ['notnull' => false]);
             $table->addColumn('createdAt', 'datetime');
 

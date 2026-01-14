@@ -1,0 +1,507 @@
+<?php
+
+namespace MauticPlugin\MauticWarmUpBundle\Command;
+
+use Doctrine\ORM\EntityManagerInterface;
+use MauticPlugin\MauticWarmUpBundle\Entity\Campaign;
+use MauticPlugin\MauticWarmUpBundle\Entity\Contact;
+use MauticPlugin\MauticWarmUpBundle\Service\EmailSenderService;
+use Psr\Log\LoggerInterface;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Output\OutputInterface;
+
+class ProcessWarmUpCommand extends Command
+{
+    protected static $defaultName = 'mautic:warmup:process';
+    protected static $defaultDescription = 'Process warmup campaigns and send emails';
+
+    private EmailSenderService $emailSender;
+    private EntityManagerInterface $em;
+    private LoggerInterface $logger;
+
+    public function __construct(
+        EmailSenderService $emailSender,
+        EntityManagerInterface $em,
+        LoggerInterface $logger
+    ) {
+        parent::__construct();
+        $this->emailSender = $emailSender;
+        $this->em = $em;
+        $this->logger = $logger;
+    }
+
+    protected function configure(): void
+    {
+        $this->setDescription(self::$defaultDescription);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        try {
+            $now = new \DateTime();
+            $output->writeln(sprintf('[%s] Starting warmup campaign processing...', $now->format('Y-m-d H:i:s')));
+            $this->logger->info('Starting warmup campaign processing', ['time' => $now->format('Y-m-d H:i:s')]);
+
+            // Get active campaigns
+            $activeCampaigns = $this->getActiveCampaigns();
+            $output->writeln(sprintf('Found %d active campaigns', count($activeCampaigns)));
+
+            $totalEmailsSent = 0;
+            $totalCampaignsProcessed = 0;
+
+            foreach ($activeCampaigns as $campaign) {
+                try {
+                    $campaignId = $campaign->getId();
+                    $output->writeln(sprintf('Processing campaign ID: %d - %s', $campaignId, $campaign->getCampaignName()));
+
+                    // Check if campaign should be sending today
+                    if (!$this->shouldSendToday($campaign, $now)) {
+                        $output->writeln(sprintf('  Skipping - not scheduled for today'));
+                        continue;
+                    }
+
+                    // Calculate day of campaign
+                    $campaignDay = $this->calculateCampaignDay($campaign, $now);
+                    if ($campaignDay <= 0) {
+                        $output->writeln(sprintf('  Skipping - campaign not started yet or completed'));
+                        continue;
+                    }
+
+                    // Calculate number of emails to send today based on warmup type
+                    $emailsToSendToday = $this->calculateEmailsForDay($campaign, $campaignDay);
+                    if ($emailsToSendToday <= 0) {
+                        $output->writeln(sprintf('  No emails to send today'));
+                        continue;
+                    }
+
+                    $output->writeln(sprintf('  Campaign Day: %d, Emails to send: %d', $campaignDay, $emailsToSendToday));
+
+                    // Get contacts ready to receive emails today
+                    $contacts = $this->getContactsForToday($campaign, $campaignDay, $emailsToSendToday);
+                    $output->writeln(sprintf('  Found %d contacts to email', count($contacts)));
+
+                    if (empty($contacts)) {
+                        $output->writeln('  No contacts ready for email today');
+                        continue;
+                    }
+
+                    // Send emails
+                    $emailsSent = $this->sendEmails($campaign, $contacts, $campaignDay, $output);
+                    $totalEmailsSent += $emailsSent;
+                    $totalCampaignsProcessed++;
+
+                    $output->writeln(sprintf('  Sent %d emails for campaign %d', $emailsSent, $campaignId));
+
+                    // Update campaign statistics
+                    $this->updateCampaignStats($campaign, $emailsSent);
+
+                } catch (\Exception $e) {
+                    $output->writeln(sprintf('  Error processing campaign %d: %s', $campaign->getId(), $e->getMessage()));
+                    $this->logger->error('Error processing campaign', [
+                        'campaign_id' => $campaign->getId(),
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString()
+                    ]);
+                }
+            }
+
+            // Check for completed campaigns
+            $this->checkCompletedCampaigns($output);
+
+            $output->writeln(sprintf('Processing complete. Sent %d emails across %d campaigns', $totalEmailsSent, $totalCampaignsProcessed));
+            $this->logger->info('Processing complete', [
+                'emails_sent' => $totalEmailsSent,
+                'campaigns_processed' => $totalCampaignsProcessed
+            ]);
+
+            return Command::SUCCESS;
+
+        } catch (\Exception $e) {
+            $output->writeln(sprintf('Fatal error: %s', $e->getMessage()));
+            $this->logger->error('Fatal error in ProcessWarmUpCommand', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return Command::FAILURE;
+        }
+    }
+
+    /**
+     * Get active campaigns that should be processed
+     */
+    private function getActiveCampaigns(): array
+    {
+        $qb = $this->em->createQueryBuilder();
+        $qb->select('c')
+            ->from(Campaign::class, 'c')
+            ->where('c.status = :status')
+            ->andWhere('c.startDate <= :now')
+            ->andWhere('(c.endDate IS NULL OR c.endDate >= :now)')
+            ->setParameter('status', 'active')
+            ->setParameter('now', new \DateTime())
+            ->orderBy('c.startDate', 'ASC');
+
+        return $qb->getQuery()->getResult();
+    }
+
+    /**
+     * Check if campaign should send emails today
+     */
+    private function shouldSendToday(Campaign $campaign, \DateTime $now): bool
+    {
+        $sendFrequency = $campaign->getSendFrequency();
+        $sendTime = $campaign->getSendTime();
+        $enableWeekends = $campaign->isEnableWeekends();
+
+        // Check if it's weekend and weekends are disabled
+        $dayOfWeek = (int) $now->format('N'); // 1=Monday, 7=Sunday
+        if (!$enableWeekends && ($dayOfWeek === 6 || $dayOfWeek === 7)) {
+            return false;
+        }
+
+        // Check frequency
+        switch ($sendFrequency) {
+            case 'daily':
+                return true;
+
+            case 'weekly':
+                // Send only on specific day (e.g., Monday)
+                $weeklyDay = $campaign->getWeeklyDay() ?? 1; // Default Monday
+                return $dayOfWeek === $weeklyDay;
+
+            case 'monthly':
+                // Send on specific day of month
+                $monthlyDay = $campaign->getMonthlyDay() ?? 1; // Default 1st
+                return (int) $now->format('j') === $monthlyDay;
+
+            default:
+                return true;
+        }
+    }
+
+    /**
+     * Calculate current day of campaign
+     */
+    private function calculateCampaignDay(Campaign $campaign, \DateTime $now): int
+    {
+        $startDate = $campaign->getStartDate();
+        if (!$startDate) {
+            return 0;
+        }
+
+        // Calculate days since start
+        $interval = $startDate->diff($now);
+        $daysSinceStart = (int) $interval->format('%a');
+
+        // Add 1 because day 1 is the first day
+        $campaignDay = $daysSinceStart + 1;
+
+        // Check if campaign is completed
+        $durationDays = $campaign->getDurationDays() ?? 30;
+        if ($campaignDay > $durationDays) {
+            return 0; // Campaign completed
+        }
+
+        return $campaignDay;
+    }
+
+    /**
+     * Calculate number of emails to send today based on warmup type
+     */
+    /**
+     * Calculate number of emails to send today (new approach: N contacts / X days)
+     */
+    private function calculateEmailsForDay(Campaign $campaign, int $campaignDay): int
+    {
+        $totalContacts = $campaign->getTotalContacts();
+        $durationDays = $campaign->getDurationDays();
+
+        if ($totalContacts === 0 || $durationDays === 0) {
+            return 0;
+        }
+
+        // Volume cible final (plateau)
+        $E_target = (int) ceil($totalContacts / $durationDays);
+
+        $startVolume = max(1, (int) $campaign->getStartVolume());
+        $increment = (int) $campaign->getDailyIncrement();
+        $alpha = 0.10; // Constante scientifique de warm-up (Gmail/Outlook)
+
+        $formulaType = $campaign->getWarmupType()->getFormulaType();
+
+        switch ($formulaType) {
+
+            case 'arithmetic':
+                // E_n = E0 + (n-1)d
+                $E = $startVolume + ($campaignDay - 1) * $increment;
+                break;
+
+            case 'geometric':
+                // E_n = E0 * r^(n-1)
+                $r = 1 + ($increment / 100);
+                $E = $startVolume * pow($r, $campaignDay - 1);
+                break;
+
+            case 'flat':
+                // E_n = c
+                $E = $startVolume;
+                break;
+
+            case 'randomize':
+                // E_n ~ U(0.85μ , 1.15μ)
+                $base = $startVolume + ($campaignDay - 1) * $increment;
+                $min = $base * 0.85;
+                $max = $base * 1.15;
+                $E = mt_rand((int) $min, (int) $max);
+                break;
+
+            case 'progressive':
+                // E_n = E_{n-1} + α(E_target − E_{n-1})
+                $previous = $campaign->getLastComputedVolume() ?? $startVolume;
+                $E = $previous + $alpha * ($E_target - $previous);
+                $campaign->setLastComputedVolume((int) round($E));
+                break;
+
+            default:
+                $E = $startVolume;
+        }
+
+        // Sécurité réputation : ne jamais dépasser le plateau cible
+        return (int) max(1, min(round($E), $E_target));
+    }
+
+    /**
+     * Get contacts ready to receive emails today
+     */
+    /**
+     * Get contacts ready to receive emails today (only those who haven't received any email)
+     */
+    private function getContactsForToday(Campaign $campaign, int $campaignDay, int $emailsToSendToday): array
+    {
+        $qb = $this->em->createQueryBuilder();
+        $qb->select('c')
+            ->from(Contact::class, 'c')
+            ->where('c.campaign = :campaign')
+            ->andWhere('c.isActive = :active')
+            ->andWhere('c.status = :status')
+            ->andWhere('c.emailsSent = 0') // Only contacts that haven't received any email
+            ->setParameter('campaign', $campaign)
+            ->setParameter('active', true)
+            ->setParameter('status', 'pending')
+            ->orderBy('c.id', 'ASC')
+            ->setMaxResults($emailsToSendToday);
+
+        return $qb->getQuery()->getResult();
+    }
+
+    private function calculateDailyVolume(Campaign $campaign, int $campaignDay): int
+    {
+        $totalContacts = $campaign->getTotalContacts();
+        $durationDays = $campaign->getDurationDays();
+
+        // Si durée = 0 ou contacts = 0
+        if ($totalContacts === 0 || $durationDays === 0) {
+            return 0;
+        }
+
+        // Calcul de base : contacts totaux / durée
+        $baseVolume = ceil($totalContacts / $durationDays);
+
+        // Appliquer le facteur de warmup si nécessaire
+        $warmupType = $campaign->getWarmupType();
+        if ($warmupType) {
+            $formulaType = $warmupType->getFormulaType();
+            $startVolume = $campaign->getStartVolume();
+
+            switch ($formulaType) {
+                case 'arithmetic':
+                    // Augmentation linéaire
+                    $increment = $campaign->getDailyIncrement();
+                    return min($startVolume + (($campaignDay - 1) * $increment), $baseVolume);
+
+                case 'flat':
+                    // Volume constant
+                    return min($startVolume, $baseVolume);
+
+                default:
+                    return min($startVolume, $baseVolume);
+            }
+        }
+
+        return (int) $baseVolume;
+    }
+    /**
+     * Send emails to contacts
+     */
+    private function sendEmails(Campaign $campaign, array $contacts, int $campaignDay, OutputInterface $output): int
+    {
+        $emailsSent = 0;
+
+        foreach ($contacts as $contact) {
+            try {
+                $domain = $campaign->getDomain();
+                if (!$domain) {
+                    $output->writeln('  No domain configured for campaign');
+                    continue;
+                }
+
+                // Prepare email content
+                $subject = $this->replaceVariables($campaign->getSubjectTemplate(), $contact, $campaign);
+                $message = $this->replaceVariables($campaign->getCustomMessage(), $contact, $campaign);
+
+                // Add unsubscribe link
+                $unsubscribeLink = $this->generateUnsubscribeLink($contact);
+                $message .= "\n\n---\n" . $unsubscribeLink;
+
+                // Send email
+                $result = $this->emailSender->sendEmail(
+                    $domain,
+                    $contact->getEmail(),
+                    $subject,
+                    $message,
+                    $campaign->getId(),
+                    $contact->getId()
+                );
+
+                if ($result['success']) {
+                    // Mark contact as completed (only one email per contact)
+                    $contact->setLastSentDate(new \DateTime());
+                    $contact->setEmailsSent(1); // Set to 1, not increment
+                    $contact->setStatus('completed'); // Contact finished
+                    $contact->setNextSendDate(null); // No next send date needed
+
+                    $emailsSent++;
+
+                    $this->em->persist($contact);
+                    $this->em->flush();
+
+                    $output->writeln(sprintf('    Sent email to: %s (contact completed)', $contact->getEmail()));
+                } else {
+                    $output->writeln(sprintf('    Failed to send to: %s - %s', $contact->getEmail(), $result['error']));
+
+                    // Mark as bounced if too many failures
+                    $contact->setFailureCount($contact->getFailureCount() + 1);
+                    if ($contact->getFailureCount() >= 3) {
+                        $contact->setStatus('bounced');
+                    }
+
+                    $this->em->persist($contact);
+                }
+
+            } catch (\Exception $e) {
+                $output->writeln(sprintf('    Error sending to %s: %s', $contact->getEmail(), $e->getMessage()));
+                $this->logger->error('Error sending email', [
+                    'contact_id' => $contact->getId(),
+                    'email' => $contact->getEmail(),
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+
+        return $emailsSent;
+    }
+
+    /**
+     * Replace variables in email content
+     */
+    private function replaceVariables(string $content, Contact $contact, Campaign $campaign): string
+    {
+        $replacements = [
+            '{{first_name}}' => $contact->getFirstName() ?? '',
+            '{{last_name}}' => $contact->getLastName() ?? '',
+            '{{email}}' => $contact->getEmail(),
+            '{{campaign_name}}' => $campaign->getCampaignName(),
+            '{{date}}' => date('Y-m-d'),
+            '{{time}}' => date('H:i:s'),
+        ];
+
+        return str_replace(array_keys($replacements), array_values($replacements), $content);
+    }
+
+    /**
+     * Generate unsubscribe link
+     */
+    private function generateUnsubscribeLink(Contact $contact): string
+    {
+        $token = $contact->getUnsubscribeToken();
+        if (!$token) {
+            $token = bin2hex(random_bytes(32));
+            $contact->setUnsubscribeToken($token);
+            $this->em->persist($contact);
+        }
+
+        $baseUrl = $_ENV['MAUTIC_BASE_URL'] ?? 'https://your-domain.com';
+        return sprintf('%s/s/warmup/unsubscribe/%s', $baseUrl, $token);
+    }
+
+    /**
+     * Calculate next send date based on campaign frequency
+     */
+    private function calculateNextSendDate(Campaign $campaign): \DateTime
+    {
+        $now = new \DateTime();
+        $sendFrequency = $campaign->getSendFrequency();
+
+        switch ($sendFrequency) {
+            case 'daily':
+                return $now->modify('+1 day');
+
+            case 'weekly':
+                return $now->modify('+1 week');
+
+            case 'monthly':
+                return $now->modify('+1 month');
+
+            default:
+                return $now->modify('+1 day');
+        }
+    }
+
+    /**
+     * Update campaign statistics
+     */
+    private function updateCampaignStats(Campaign $campaign, int $emailsSentToday): void
+    {
+        $campaign->setEmailsSent($campaign->getEmailsSent() + $emailsSentToday);
+        $campaign->setUpdatedAt(new \DateTime());
+
+        // Calculate progress percentage
+        $totalContacts = $campaign->getTotalContacts();
+        if ($totalContacts > 0) {
+            $progress = min(100, ($campaign->getEmailsSent() / $totalContacts) * 100);
+            $campaign->setProgress($progress);
+        }
+
+        $this->em->persist($campaign);
+        $this->em->flush();
+    }
+
+    /**
+     * Check and mark completed campaigns
+     */
+    private function checkCompletedCampaigns(OutputInterface $output): void
+    {
+        $qb = $this->em->createQueryBuilder();
+        $qb->select('c')
+            ->from(Campaign::class, 'c')
+            ->where('c.status = :status')
+            ->andWhere('c.endDate < :now')
+            ->setParameter('status', 'active')
+            ->setParameter('now', new \DateTime());
+
+        $completedCampaigns = $qb->getQuery()->getResult();
+
+        foreach ($completedCampaigns as $campaign) {
+            $campaign->setStatus('completed');
+            $campaign->setUpdatedAt(new \DateTime());
+            $this->em->persist($campaign);
+
+            $output->writeln(sprintf('Marked campaign %d as completed', $campaign->getId()));
+        }
+
+        if (!empty($completedCampaigns)) {
+            $this->em->flush();
+        }
+    }
+}

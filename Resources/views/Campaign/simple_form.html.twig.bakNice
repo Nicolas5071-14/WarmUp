@@ -1,0 +1,2188 @@
+{% extends '@MauticCore/Default/content.html.twig' %}
+
+{% block headerTitle %}
+    {{ isEdit ? 'Edit Campaign'|trans : 'Create Campaign'|trans }}
+{% endblock %}
+
+{% block mauticContent %}warmup_campaign{% endblock %}
+
+{% block content %}
+<div class="warmup-campaign-form" style="max-width: 1400px; margin: 0 auto;">
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <div class="row">
+                <div class="col-xs-8">
+                    <h3 class="panel-title">
+                        <i class="fa fa-envelope-o"></i> 
+                        {{ isEdit ? 'Edit Campaign'|trans : 'Create New Warmup Campaign'|trans }}
+                    </h3>
+                </div>
+                <div class="col-xs-4 text-right">
+                    <a href="{{ path('warmup_campaign_index') }}" class="btn btn-default btn-sm">
+                        <i class="fa fa-arrow-left"></i> {{ 'Back to List'|trans }}
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <form id="campaign-form" method="post" action="{{ path('warmup_campaign_save') }}" class="form-horizontal" enctype="multipart/form-data">
+            {{ form_start(form) }}
+            
+            <div class="panel-body">
+                <!-- Progress Steps - Amélioré -->
+                <div class="row mb-4">
+                    <div class="col-xs-12">
+                        <div class="warmup-progress-container">
+                            <div class="warmup-progress-bar">
+                                <div class="warmup-progress-fill" id="progress-fill"></div>
+                            </div>
+                            <ul class="warmup-steps" id="warmup-steps">
+                                <li class="warmup-step active completed" data-step="1">
+                                    <div class="step-icon">
+                                        <i class="fa fa-info-circle"></i>
+                                    </div>
+                                    <div class="step-label">{{ 'Basic Info'|trans }}</div>
+                                </li>
+                                <li class="warmup-step" data-step="2">
+                                    <div class="step-icon">
+                                        <i class="fa fa-cog"></i>
+                                    </div>
+                                    <div class="step-label">{{ 'Settings'|trans }}</div>
+                                </li>
+                                <li class="warmup-step" data-step="3">
+                                    <div class="step-icon">
+                                        <i class="fa fa-users"></i>
+                                    </div>
+                                    <div class="step-label">{{ 'Contacts'|trans }}</div>
+                                </li>
+                                <li class="warmup-step" data-step="4">
+                                    <div class="step-icon">
+                                        <i class="fa fa-envelope"></i>
+                                    </div>
+                                    <div class="step-label">{{ 'Content'|trans }}</div>
+                                </li>
+                                <li class="warmup-step" data-step="5">
+                                    <div class="step-icon">
+                                        <i class="fa fa-check"></i>
+                                    </div>
+                                    <div class="step-label">{{ 'Review'|trans }}</div>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Step 1: Basic Information -->
+                <div class="step-content active" id="step-1">
+                    <div class="step-header">
+                        <h4><i class="fa fa-info-circle"></i> {{ 'Basic Campaign Information'|trans }}</h4>
+                        <p class="text-muted">{{ 'Enter the essential details for your warmup campaign'|trans }}</p>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                {{ form_label(form.campaignName, null, {'label_attr': {'class': 'control-label required'}}) }}
+                                <div class="input-group">
+                                    <span class="input-group-addon"><i class="fa fa-tag"></i></span>
+                                    {{ form_widget(form.campaignName, {'attr': {'class': 'form-control', 'placeholder': 'My Warmup Campaign'}}) }}
+                                </div>
+                                {{ form_errors(form.campaignName) }}
+                                <small class="help-block">{{ 'Choose a descriptive name for easy identification'|trans }}</small>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                {{ form_label(form.domain, null, {'label_attr': {'class': 'control-label required'}}) }}
+                                <div class="input-group">
+                                    <span class="input-group-addon"><i class="fa fa-globe"></i></span>
+                                    {{ form_widget(form.domain, {'attr': {'class': 'form-control'}}) }}
+                                </div>
+                                {{ form_errors(form.domain) }}
+                                <small class="help-block">{{ 'Select the domain that will send emails'|trans }}</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                {{ form_label(form.description) }}
+                                <div class="input-group">
+                                    <span class="input-group-addon"><i class="fa fa-align-left"></i></span>
+                                    {{ form_widget(form.description, {'attr': {'class': 'form-control', 'rows': '3', 'placeholder': 'Optional description...'}}) }}
+                                </div>
+                                {{ form_errors(form.description) }}
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                {{ form_label(form.warmupType, null, {'label_attr': {'class': 'control-label required'}}) }}
+                                <div class="input-group">
+                                    <span class="input-group-addon"><i class="fa fa-rocket"></i></span>
+                                    {{ form_widget(form.warmupType, {'attr': {'class': 'form-control'}}) }}
+                                </div>
+                                {{ form_errors(form.warmupType) }}
+                                <small class="help-block">{{ 'Choose between gradual, aggressive, or custom warmup'|trans }}</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Step 2: Campaign Settings -->
+                <div class="step-content" id="step-2">
+                    <div class="step-header">
+                        <h4><i class="fa fa-cog"></i> {{ 'Warmup Configuration'|trans }}</h4>
+                        <p class="text-muted">{{ 'Configure how your warmup campaign will progress'|trans }}</p>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="settings-group">
+                                <h5><i class="fa fa-calendar"></i> {{ 'Schedule Settings'|trans }}</h5>
+                                
+                                <div class="form-group">
+                                    {{ form_label(form.startDate, null, {'label_attr': {'class': 'control-label required'}}) }}
+                                    <div class="input-group">
+                                        <span class="input-group-addon"><i class="fa fa-calendar"></i></span>
+                                        {{ form_widget(form.startDate, {'attr': {'class': 'form-control'}}) }}
+                                    </div>
+                                    {{ form_errors(form.startDate) }}
+                                </div>
+                                
+                                <div class="form-group">
+                                    {{ form_label(form.sendTime) }}
+                                    <div class="input-group">
+                                        <span class="input-group-addon"><i class="fa fa-clock-o"></i></span>
+                                        {{ form_widget(form.sendTime, {'attr': {'class': 'form-control'}}) }}
+                                    </div>
+                                    {{ form_errors(form.sendTime) }}
+                                    <small class="help-block">{{ 'Preferred time to send emails daily'|trans }}</small>
+                                </div>
+                                
+                                <div class="form-group">
+                                    {{ form_label(form.sendFrequency) }}
+                                    <div class="input-group">
+                                        <span class="input-group-addon"><i class="fa fa-repeat"></i></span>
+                                        {{ form_widget(form.sendFrequency, {'attr': {'class': 'form-control'}}) }}
+                                    </div>
+                                    {{ form_errors(form.sendFrequency) }}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="settings-group">
+                                <h5><i class="fa fa-bar-chart"></i> {{ 'Volume Settings'|trans }}</h5>
+                                
+                                <div class="form-group">
+                                    {{ form_label(form.startVolume, null, {'label_attr': {'class': 'control-label required'}}) }}
+                                    <div class="input-group">
+                                        <span class="input-group-addon"><i class="fa fa-sort-numeric-asc"></i></span>
+                                        {{ form_widget(form.startVolume, {'attr': {'class': 'form-control', 'min': '1', 'value': '20'}}) }}
+                                        <span class="input-group-addon">{{ 'emails/day'|trans }}</span>
+                                    </div>
+                                    {{ form_errors(form.startVolume) }}
+                                </div>
+                                
+                                <div class="form-group">
+                                    {{ form_label(form.durationDays, null, {'label_attr': {'class': 'control-label required'}}) }}
+                                    <div class="input-group">
+                                        <span class="input-group-addon"><i class="fa fa-calendar-check-o"></i></span>
+                                        {{ form_widget(form.durationDays, {'attr': {'class': 'form-control', 'min': '1', 'value': '30'}}) }}
+                                        <span class="input-group-addon">{{ 'days'|trans }}</span>
+                                    </div>
+                                    {{ form_errors(form.durationDays) }}
+                                </div>
+                                
+                                <div class="form-group">
+                                    {{ form_label(form.dailyIncrement) }}
+                                    <div class="input-group">
+                                        <span class="input-group-addon"><i class="fa fa-percent"></i></span>
+                                        {{ form_widget(form.dailyIncrement, {'attr': {'class': 'form-control', 'min': '0', 'max': '100', 'value': '10'}}) }}
+                                        <span class="input-group-addon">%</span>
+                                    </div>
+                                    {{ form_errors(form.dailyIncrement) }}
+                                    <small class="help-block">{{ 'Daily volume increase percentage'|trans }}</small>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="checkbox">
+                                            <label class="control-label">
+                                                {{ form_widget(form.enableWeekends) }}
+                                                <strong>{{ form_label(form.enableWeekends) }}</strong>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="checkbox">
+                                            <label class="control-label">
+                                                {{ form_widget(form.enableRandomization) }}
+                                                <strong>{{ form_label(form.enableRandomization) }}</strong>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Live Preview -->
+                            <div class="alert alert-info" id="warmup-preview">
+                                <strong><i class="fa fa-info-circle"></i> {{ 'Preview:'|trans }}</strong>
+                                <p class="mb-0" id="warmup-preview-text">{{ 'Configure settings to see preview'|trans }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Step 3: Contacts -->
+                <div class="step-content" id="step-3">
+                    <div class="step-header">
+                        <h4><i class="fa fa-users"></i> {{ 'Contact Management'|trans }}</h4>
+                        <p class="text-muted">{{ 'Add contacts for your warmup campaign'|trans }}</p>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="list-group" id="contact-source-tabs">
+                                <a href="#" class="list-group-item contact-source-option active" data-source="manual">
+                                    <div class="source-icon"><i class="fa fa-keyboard-o fa-2x"></i></div>
+                                    <strong>{{ 'Manual Entry'|trans }}</strong>
+                                    <small class="text-muted d-block">{{ 'Type or paste emails'|trans }}</small>
+                                </a>
+                                <a href="#" class="list-group-item contact-source-option" data-source="csv">
+                                    <div class="source-icon"><i class="fa fa-file-excel-o fa-2x"></i></div>
+                                    <strong>{{ 'CSV Import'|trans }}</strong>
+                                    <small class="text-muted d-block">{{ 'Upload CSV file'|trans }}</small>
+                                </a>
+                            </div>
+                            
+                            <!-- Contact Statistics -->
+                            <div class="contact-stats panel panel-success">
+                                <div class="panel-body text-center">
+                                    <div class="stat-icon">
+                                        <i class="fa fa-users fa-3x"></i>
+                                    </div>
+                                    <h2 class="stat-number" id="contacts-count">0</h2>
+                                    <p class="stat-label">{{ 'Contacts Ready'|trans }}</p>
+                                    <div class="progress" style="height: 5px;">
+                                        <div class="progress-bar progress-bar-success" id="contacts-progress" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-9">
+                            <!-- Manual Contacts -->
+                            <div id="manual-contacts-section" class="contacts-section">
+                                <div class="contact-input-header">
+                                    <h5>{{ 'Manual Contact Entry'|trans }}</h5>
+                                    <div class="btn-group btn-group-sm">
+                                        <button type="button" id="validate-emails-btn" class="btn btn-info">
+                                            <i class="fa fa-check-circle"></i> {{ 'Validate Emails'|trans }}
+                                        </button>
+                                        <button type="button" id="clear-manual-contacts" class="btn btn-danger">
+                                            <i class="fa fa-trash"></i> {{ 'Clear All'|trans }}
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    {{ form_widget(form.manualContacts, {'attr': {'class': 'form-control contact-textarea', 'rows': '12', 'placeholder': 'Enter email addresses (one per line):\nuser1@example.com\nuser2@example.com\nuser3@example.com'}}) }}
+                                    {{ form_errors(form.manualContacts) }}
+                                </div>
+                                
+                                <div class="contact-validation-results" id="validation-results" style="display: none;">
+                                    <div class="alert alert-success">
+                                        <strong><i class="fa fa-check"></i> <span id="valid-count">0</span> {{ 'valid emails'|trans }}</strong>
+                                    </div>
+                                </div>
+                                
+                                <div class="help-block">
+                                    <i class="fa fa-lightbulb-o"></i> 
+                                    <strong>{{ 'Tip:'|trans }}</strong> 
+                                    {{ 'Enter one email per line. Duplicates will be automatically removed.'|trans }}
+                                </div>
+                            </div>
+                            
+                            <!-- CSV Import -->
+                            <div id="csv-import-section" class="contacts-section" style="display: none;">
+                                <div class="contact-input-header">
+                                    <h5>{{ 'CSV File Import'|trans }}</h5>
+                                </div>
+                                
+                                <div class="csv-upload-area" id="csv-upload-area">
+                                    <div class="upload-icon">
+                                        <i class="fa fa-cloud-upload fa-4x"></i>
+                                    </div>
+                                    <h4>{{ 'Drop your CSV file here'|trans }}</h4>
+                                    <p class="text-muted">{{ 'or click to browse'|trans }}</p>
+                                    <div class="form-group">
+                                        {{ form_widget(form.csvFile, {'attr': {'class': 'form-control', 'accept': '.csv'}}) }}
+                                        {{ form_errors(form.csvFile) }}
+                                    </div>
+                                </div>
+                                
+                                <div class="alert alert-info">
+                                    <strong><i class="fa fa-info-circle"></i> {{ 'CSV Format:'|trans }}</strong>
+                                    <ul class="mb-0">
+                                        <li>{{ 'Required column: email'|trans }}</li>
+                                        <li>{{ 'Optional columns: first_name, last_name'|trans }}</li>
+                                        <li>{{ 'First row must be headers'|trans }}</li>
+                                        <li>{{ 'Maximum file size: 1MB'|trans }}</li>
+                                    </ul>
+                                </div>
+                                
+                                <div id="csv-preview" style="display: none;">
+                                    <h5>{{ 'CSV Preview'|trans }} <small class="text-muted" id="csv-total-rows"></small></h5>
+                                    <div class="table-responsive csv-preview-table">
+                                        <table class="table table-bordered table-striped table-hover">
+                                            <thead id="csv-preview-headers"></thead>
+                                            <tbody id="csv-preview-rows"></tbody>
+                                        </table>
+                                    </div>
+                                    <div class="text-right">
+                                        <button type="button" id="import-csv-contacts" class="btn btn-success btn-lg">
+                                            <i class="fa fa-check"></i> {{ 'Import Contacts'|trans }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Contact Errors -->
+                            <div id="contact-errors" class="alert alert-danger" style="display: none;">
+                                <strong><i class="fa fa-exclamation-triangle"></i> {{ 'Errors Found:'|trans }}</strong>
+                                <ul id="error-list" class="mb-0"></ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Step 4: Email Content -->
+                <div class="step-content" id="step-4">
+                    <div class="step-header">
+                        <h4><i class="fa fa-envelope"></i> {{ 'Email Content & Template'|trans }}</h4>
+                        <p class="text-muted">{{ 'Design your warmup email content'|trans }}</p>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="form-group">
+                                {{ form_label(form.template) }}
+                                <div class="input-group">
+                                    <span class="input-group-addon"><i class="fa fa-file-text-o"></i></span>
+                                    {{ form_widget(form.template, {'attr': {'class': 'form-control'}}) }}
+                                </div>
+                                {{ form_errors(form.template) }}
+                                <small class="help-block">{{ 'Select a pre-designed template or create custom content'|trans }}</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                {{ form_label(form.subjectTemplate, null, {'label_attr': {'class': 'control-label required'}}) }}
+                                <div class="input-group">
+                                    <span class="input-group-addon"><i class="fa fa-header"></i></span>
+                                    {{ form_widget(form.subjectTemplate, {'attr': {'class': 'form-control', 'placeholder': 'Your email subject...'}}) }}
+                                </div>
+                                {{ form_errors(form.subjectTemplate) }}
+                                <small id="subject-char-count" class="help-block">0 {{ 'characters'|trans }}</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                {{ form_label(form.customMessage, null, {'label_attr': {'class': 'control-label required'}}) }}
+                                {{ form_widget(form.customMessage, {'attr': {'class': 'form-control', 'rows': '10', 'placeholder': 'Enter your email content here...'}}) }}
+                                {{ form_errors(form.customMessage) }}
+                                <small id="message-char-count" class="help-block">0 {{ 'characters'|trans }}</small>
+                            </div>
+                            
+                            <div class="well">
+                                <strong><i class="fa fa-magic"></i> {{ 'Available Variables:'|trans }}</strong>
+                                <div class="variable-tags">
+                                    {# <span class="label label-default variable-tag" data-variable="{{first_name}}">{{first_name}}</span>
+                                    <span class="label label-default variable-tag" data-variable="{{last_name}}">{{last_name}}</span>
+                                    <span class="label label-default variable-tag" data-variable="{{email}}">{{email}}</span>
+                                    <span class="label label-default variable-tag" data-variable="{{campaign_name}}">{{campaign_name}}</span>
+                                    <span class="label label-default variable-tag" data-variable="{{unsubscribe_link}}">{{unsubscribe_link}}</span> #}
+                                </div>
+                                <small class="help-block">{{ 'Click on a variable to insert it at cursor position'|trans }}</small>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <div class="email-tools-panel">
+                                <h5><i class="fa fa-wrench"></i> {{ 'Email Tools'|trans }}</h5>
+                                
+                                <div class="form-group">
+                                    <label>{{ 'Test Email'|trans }}</label>
+                                    <div class="input-group">
+                                        <input type="email" 
+                                               id="test-email" 
+                                               class="form-control" 
+                                               placeholder="test@example.com">
+                                        <span class="input-group-btn">
+                                            <button type="button" id="send-test-email-btn" class="btn btn-primary">
+                                                <i class="fa fa-paper-plane"></i> {{ 'Send'|trans }}
+                                            </button>
+                                        </span>
+                                    </div>
+                                    <small class="help-block">{{ 'Send test to verify content'|trans }}</small>
+                                </div>
+                                
+                                <button type="button" id="preview-email-btn" class="btn btn-default btn-block btn-lg">
+                                    <i class="fa fa-eye"></i> {{ 'Preview Email'|trans }}
+                                </button>
+                                
+                                <div class="alert alert-warning mt-3">
+                                    <i class="fa fa-info-circle"></i>
+                                    <strong>{{ 'Note:'|trans }}</strong>
+                                    <p class="mb-0">{{ 'Unsubscribe link is automatically included in all emails'|trans }}</p>
+                                </div>
+                                
+                                <!-- Email Preview -->
+                                <div id="email-preview-panel" class="email-preview" style="display: none;">
+                                    <h6>{{ 'Live Preview'|trans }}</h6>
+                                    <div class="preview-frame">
+                                        <div class="preview-subject" id="preview-subject"></div>
+                                        <div class="preview-content" id="preview-content"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Step 5: Review -->
+                <div class="step-content" id="step-5">
+                    <div class="step-header">
+                        <h4><i class="fa fa-check-circle"></i> {{ 'Review & Launch'|trans }}</h4>
+                        <p class="text-muted">{{ 'Review all settings before launching your campaign'|trans }}</p>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="panel panel-primary">
+                                <div class="panel-heading">
+                                    <h5 class="panel-title"><i class="fa fa-info-circle"></i> {{ 'Campaign Summary'|trans }}</h5>
+                                </div>
+                                <div class="panel-body">
+                                    <table class="table table-striped summary-table">
+                                        <tbody>
+                                            <tr>
+                                                <th width="40%"><i class="fa fa-tag"></i> {{ 'Campaign Name'|trans }}</th>
+                                                <td id="summary-name" class="text-bold">--</td>
+                                            </tr>
+                                            <tr>
+                                                <th><i class="fa fa-globe"></i> {{ 'Domain'|trans }}</th>
+                                                <td id="summary-domain">--</td>
+                                            </tr>
+                                            <tr>
+                                                <th><i class="fa fa-calendar"></i> {{ 'Start Date'|trans }}</th>
+                                                <td id="summary-start-date">--</td>
+                                            </tr>
+                                            <tr>
+                                                <th><i class="fa fa-users"></i> {{ 'Total Contacts'|trans }}</th>
+                                                <td id="summary-contacts" class="text-success text-bold">0</td>
+                                            </tr>
+                                            <tr>
+                                                <th><i class="fa fa-calendar-check-o"></i> {{ 'Duration'|trans }}</th>
+                                                <td id="summary-duration">0 {{ 'days'|trans }}</td>
+                                            </tr>
+                                            <tr>
+                                                <th><i class="fa fa-rocket"></i> {{ 'Warmup Type'|trans }}</th>
+                                                <td id="summary-warmup-type">--</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="panel panel-success">
+                                <div class="panel-heading">
+                                    <h5 class="panel-title"><i class="fa fa-bar-chart"></i> {{ 'Warmup Projection'|trans }}</h5>
+                                </div>
+                                <div class="panel-body text-center">
+                                    <div class="projection-stats">
+                                        <div class="stat-item">
+                                            <div class="stat-icon">
+                                                <i class="fa fa-envelope-o fa-3x text-primary"></i>
+                                            </div>
+                                            <h2 class="stat-value" id="summary-total-emails">0</h2>
+                                            <p class="stat-description">{{ 'Total Emails'|trans }}</p>
+                                        </div>
+                                        
+                                        <div class="progress-section">
+                                            <label>{{ 'Campaign Progress Simulation'|trans }}</label>
+                                            <div class="progress" style="height: 30px;">
+                                                <div id="summary-progress-bar" 
+                                                     class="progress-bar progress-bar-success progress-bar-striped" 
+                                                     role="progressbar" 
+                                                     style="width: 0%">
+                                                    <span class="progress-text">0%</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="projection-details">
+                                            <div class="detail-item">
+                                                <strong>{{ 'Starting Volume:'|trans }}</strong>
+                                                <span id="summary-start-volume">0</span> {{ 'emails/day'|trans }}
+                                            </div>
+                                            <div class="detail-item">
+                                                <strong>{{ 'Daily Increment:'|trans }}</strong>
+                                                <span id="summary-increment">0</span>%
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="alert alert-info mt-3">
+                                        <i class="fa fa-info-circle"></i>
+                                        {{ 'Review all settings carefully before proceeding'|trans }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-xs-12">
+                            <div class="alert alert-warning">
+                                <h5><i class="fa fa-exclamation-triangle"></i> {{ 'Important Reminders:'|trans }}</h5>
+                                <ul class="mb-0">
+                                    <li>{{ 'Ensure all email addresses are valid and opted-in'|trans }}</li>
+                                    <li>{{ 'Monitor your campaign performance regularly'|trans }}</li>
+                                    <li>{{ 'You can pause or stop the campaign at any time'|trans }}</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Form Actions -->
+            <div class="panel-footer">
+                <div class="row">
+                    <div class="col-xs-6">
+                        <button type="button" id="prev-step-btn" class="btn btn-default btn-lg" style="display: none;">
+                            <i class="fa fa-arrow-left"></i> {{ 'Previous'|trans }}
+                        </button>
+                    </div>
+                    <div class="col-xs-6 text-right">
+                        <button type="button" id="next-step-btn" class="btn btn-primary btn-lg">
+                            {{ 'Next Step'|trans }} <i class="fa fa-arrow-right"></i>
+                        </button>
+                        
+                        <div style="display: none;" id="final-buttons">
+                            {{ form_widget(form.save, {'attr': {'class': 'btn btn-default btn-lg'}}) }}
+                            {{ form_widget(form.saveAndActivate, {'attr': {'class': 'btn btn-success btn-lg'}}) }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {{ form_end(form) }}
+        </form>
+    </div>
+</div>
+
+<!-- Email Preview Modal -->
+<div class="modal fade" id="email-preview-modal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                <h4 class="modal-title"><i class="fa fa-eye"></i> {{ 'Email Preview'|trans }}</h4>
+            </div>
+            <div class="modal-body">
+                <div class="email-preview-frame">
+                    <div class="email-header">
+                        <strong>{{ 'Subject:'|trans }}</strong> <span id="modal-preview-subject"></span>
+                    </div>
+                    <hr>
+                    <div class="email-body" id="modal-preview-body"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">{{ 'Close'|trans }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // ============================================
+    // VARIABLES GLOBALES
+    // ============================================
+    let currentStep = 1;
+    const totalSteps = 5;
+    let contactsCount = 0;
+    let parsedCSVData = [];
+    let validatedEmails = new Set();
+
+    // ============================================
+    // INITIALISATION
+    // ============================================
+    function initialize() {
+        setupSteps();
+        setupContactSection();
+        setupEmailContent();
+        setupFormValidation();
+        setupAutoSave();
+        
+        // Définir la date de début par défaut à demain
+        const startDateInput = document.querySelector('[name="campaign_form[startDate]"]');
+        if (startDateInput && !startDateInput.value) {
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            startDateInput.valueAsDate = tomorrow;
+        }
+        
+        updateWarmupPreview();
+        updateSummary();
+        
+        console.log('✓ Application initialisée avec succès');
+    }
+
+    // ============================================
+    // GESTION DES ÉTAPES
+    // ============================================
+    function setupSteps() {
+        const tabs = document.querySelectorAll('.warmup-step');
+        const stepContents = document.querySelectorAll('.step-content');
+        const prevBtn = document.getElementById('prev-step-btn');
+        const nextBtn = document.getElementById('next-step-btn');
+        const finalButtons = document.getElementById('final-buttons');
+        const progressFill = document.getElementById('progress-fill');
+
+        // Navigation avec les boutons
+        if (prevBtn) {
+            prevBtn.addEventListener('click', () => goToStep(currentStep - 1));
+        }
+
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => {
+                if (validateCurrentStep()) {
+                    goToStep(currentStep + 1);
+                }
+            });
+        }
+
+        // Navigation directe sur les étapes (si déjà validées)
+        tabs.forEach(tab => {
+            tab.addEventListener('click', function() {
+                const stepNum = parseInt(this.getAttribute('data-step'));
+                if (stepNum < currentStep || this.classList.contains('completed')) {
+                    goToStep(stepNum);
+                }
+            });
+        });
+
+        // Fonction pour naviguer vers une étape
+        function goToStep(step) {
+            if (step < 1 || step > totalSteps) return;
+            
+            // Animation de sortie
+            const currentContent = document.getElementById(`step-${currentStep}`);
+            if (currentContent) {
+                currentContent.style.opacity = '0';
+                currentContent.style.transform = 'translateX(-20px)';
+            }
+            
+            setTimeout(() => {
+                currentStep = step;
+                
+                // Mettre à jour les onglets
+                tabs.forEach(tab => {
+                    const tabStep = parseInt(tab.getAttribute('data-step'));
+                    tab.classList.toggle('active', tabStep === currentStep);
+                    if (tabStep < currentStep) {
+                        tab.classList.add('completed');
+                    }
+                });
+                
+                // Mettre à jour le contenu
+                stepContents.forEach((content, index) => {
+                    const isActive = (index + 1) === currentStep;
+                    if (isActive) {
+                        content.classList.add('active');
+                        content.style.display = 'block';
+                        setTimeout(() => {
+                            content.style.opacity = '1';
+                            content.style.transform = 'translateX(0)';
+                        }, 50);
+                    } else {
+                        content.classList.remove('active');
+                        setTimeout(() => {
+                            content.style.display = 'none';
+                        }, 300);
+                    }
+                });
+                
+                // Mettre à jour la barre de progression
+                const progress = ((currentStep - 1) / (totalSteps - 1)) * 100;
+                if (progressFill) {
+                    progressFill.style.width = `${progress}%`;
+                }
+                
+                // Mettre à jour les boutons
+                if (prevBtn) {
+                    prevBtn.style.display = currentStep > 1 ? 'inline-block' : 'none';
+                }
+                
+                if (currentStep === totalSteps) {
+                    if (nextBtn) nextBtn.style.display = 'none';
+                    if (finalButtons) finalButtons.style.display = 'inline-block';
+                    updateSummary();
+                } else {
+                    if (nextBtn) nextBtn.style.display = 'inline-block';
+                    if (finalButtons) finalButtons.style.display = 'none';
+                }
+                
+                // Scroll vers le haut
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }, 300);
+        }
+
+        // Démarrer à l'étape 1
+        goToStep(1);
+    }
+
+    // ============================================
+    // GESTION DES CONTACTS
+    // ============================================
+    function setupContactSection() {
+        const contactSourceOptions = document.querySelectorAll('.contact-source-option');
+        const manualContacts = document.querySelector('[name="campaign_form[manualContacts]"]');
+        const csvFileInput = document.querySelector('[name="campaign_form[csvFile]"]');
+        const validateEmailsBtn = document.getElementById('validate-emails-btn');
+        const importCSVBtn = document.getElementById('import-csv-contacts');
+        const clearManualBtn = document.getElementById('clear-manual-contacts');
+        
+        // Sélection de la source de contacts
+        contactSourceOptions.forEach(option => {
+            option.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                contactSourceOptions.forEach(opt => opt.classList.remove('active'));
+                this.classList.add('active');
+                
+                const source = this.getAttribute('data-source');
+                
+                // Afficher la section correspondante avec animation
+                document.querySelectorAll('.contacts-section').forEach(section => {
+                    section.style.display = 'none';
+                });
+                
+                const activeSection = document.getElementById(`${source}-contacts-section`);
+                if (activeSection) {
+                    activeSection.style.display = 'block';
+                    setTimeout(() => {
+                        activeSection.style.opacity = '1';
+                    }, 50);
+                }
+                
+                updateContactsCounter();
+            });
+        });
+        
+        // Mise à jour en temps réel du compteur
+        if (manualContacts) {
+            manualContacts.addEventListener('input', debounce(function() {
+                updateContactsCounter();
+                updateContactProgress();
+            }, 500));
+        }
+        
+        // Validation des emails
+        if (validateEmailsBtn) {
+            validateEmailsBtn.addEventListener('click', validateManualEmails);
+        }
+        
+        // Effacer les contacts manuels
+        if (clearManualBtn) {
+            clearManualBtn.addEventListener('click', function() {
+                if (confirm('Êtes-vous sûr de vouloir supprimer tous les contacts ?')) {
+                    if (manualContacts) {
+                        manualContacts.value = '';
+                        validatedEmails.clear();
+                        updateContactsCounter();
+                        showNotification('Contacts effacés', 'success');
+                    }
+                }
+            });
+        }
+        
+        // Gestion du fichier CSV
+        if (csvFileInput) {
+            // Drag and drop
+            const uploadArea = document.getElementById('csv-upload-area');
+            if (uploadArea) {
+                uploadArea.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                    this.classList.add('dragover');
+                });
+                
+                uploadArea.addEventListener('dragleave', function() {
+                    this.classList.remove('dragover');
+                });
+                
+                uploadArea.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    this.classList.remove('dragover');
+                    
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        csvFileInput.files = files;
+                        parseCSVFile();
+                    }
+                });
+            }
+            
+            // Changement de fichier
+            csvFileInput.addEventListener('change', function() {
+                if (this.files.length > 0) {
+                    parseCSVFile();
+                }
+            });
+        }
+        
+        // Import des contacts CSV
+        if (importCSVBtn) {
+            importCSVBtn.addEventListener('click', importCSVContacts);
+        }
+        
+        updateContactsCounter();
+    }
+
+    // Validation des emails manuels
+    function validateManualEmails() {
+        const manualContacts = document.querySelector('[name="campaign_form[manualContacts]"]');
+        if (!manualContacts) return;
+        
+        const emailText = manualContacts.value;
+        const lines = emailText.split('\n');
+        const errors = [];
+        validatedEmails.clear();
+        
+        lines.forEach((line, index) => {
+            const email = line.trim();
+            if (!email) return;
+            
+            if (isValidEmail(email)) {
+                validatedEmails.add(email);
+            } else {
+                errors.push(`Ligne ${index + 1}: Email invalide - ${email}`);
+            }
+        });
+        
+        // Mettre à jour le champ avec uniquement les emails valides
+        manualContacts.value = Array.from(validatedEmails).join('\n');
+        
+        // Afficher les résultats
+        const resultsDiv = document.getElementById('validation-results');
+        const validCount = document.getElementById('valid-count');
+        
+        if (resultsDiv && validCount) {
+            validCount.textContent = validatedEmails.size;
+            resultsDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                resultsDiv.style.display = 'none';
+            }, 3000);
+        }
+        
+        if (errors.length > 0) {
+            showErrors(errors);
+        } else {
+            showNotification(`${validatedEmails.size} emails validés avec succès`, 'success');
+        }
+        
+        updateContactsCounter();
+    }
+
+    // Parser le fichier CSV
+    function parseCSVFile() {
+        const fileInput = document.querySelector('[name="campaign_form[csvFile]"]');
+        const file = fileInput?.files[0];
+        
+        if (!file) {
+            showError('Veuillez sélectionner un fichier CSV');
+            return;
+        }
+        
+        // Vérifications
+        if (file.size > 1048576) {
+            showError('La taille du fichier dépasse 1MB');
+            return;
+        }
+        
+        if (!file.name.toLowerCase().endsWith('.csv')) {
+            showError('Veuillez uploader un fichier CSV');
+            return;
+        }
+        
+        showNotification('Analyse du fichier CSV...', 'info');
+        
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            try {
+                const csvContent = e.target.result;
+                parseCSVContent(csvContent, file.name);
+            } catch (error) {
+                showError('Erreur lors de la lecture du CSV: ' + error.message);
+            }
+        };
+        
+        reader.onerror = function() {
+            showError('Erreur lors de la lecture du fichier');
+        };
+        
+        reader.readAsText(file);
+    }
+
+    // Parser le contenu CSV
+    function parseCSVContent(csvContent, filename) {
+        const lines = csvContent.split('\n').filter(line => line.trim());
+        
+        if (lines.length < 2) {
+            showError('Le fichier CSV doit contenir au moins une ligne d\'en-tête et une ligne de données');
+            return;
+        }
+        
+        // Parser les en-têtes
+        const headers = parseCSVLine(lines[0]);
+        const emailIndex = headers.findIndex(h => h.toLowerCase() === 'email');
+        
+        if (emailIndex === -1) {
+            showError('Le CSV doit contenir une colonne "email"');
+            return;
+        }
+        
+        // Parser les données
+        parsedCSVData = [];
+        const errors = [];
+        const allRows = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            const rowData = parseCSVLine(line);
+            
+            if (rowData.length !== headers.length) {
+                errors.push(`Ligne ${i + 1}: Nombre de colonnes incorrect`);
+                continue;
+            }
+            
+            const row = {};
+            headers.forEach((header, index) => {
+                row[header.toLowerCase()] = rowData[index] || '';
+            });
+            
+            // Valider l'email
+            if (!isValidEmail(row.email)) {
+                errors.push(`Ligne ${i + 1}: Email invalide - ${row.email}`);
+                continue;
+            }
+            
+            allRows.push(row);
+        }
+        
+        if (allRows.length === 0) {
+            showError('Aucun contact valide trouvé dans le CSV');
+            return;
+        }
+        
+        // Stocker tous les contacts
+        parsedCSVData = allRows;
+        
+        // Afficher les erreurs s'il y en a
+        if (errors.length > 0 && errors.length < 10) {
+            showErrors(errors);
+        }
+        
+        // Afficher l'aperçu (limité aux 10 premières lignes)
+        showCSVPreview(headers, allRows.slice(0, 10), allRows.length);
+        showNotification(`${allRows.length} contacts trouvés dans le fichier`, 'success');
+    }
+
+    // Parser une ligne CSV
+    function parseCSVLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            const nextChar = line[i + 1];
+            
+            if (char === '"' && !inQuotes) {
+                inQuotes = true;
+            } else if (char === '"' && inQuotes && nextChar === '"') {
+                current += '"';
+                i++;
+            } else if (char === '"' && inQuotes) {
+                inQuotes = false;
+            } else if (char === ',' && !inQuotes) {
+                result.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        
+        result.push(current.trim());
+        return result;
+    }
+
+    // Afficher l'aperçu CSV
+    function showCSVPreview(headers, data, totalCount) {
+        const previewContainer = document.getElementById('csv-preview');
+        const headersContainer = document.getElementById('csv-preview-headers');
+        const rowsContainer = document.getElementById('csv-preview-rows');
+        const totalRowsSpan = document.getElementById('csv-total-rows');
+        
+        if (!previewContainer || !headersContainer || !rowsContainer) return;
+        
+        // Effacer l'aperçu précédent
+        headersContainer.innerHTML = '';
+        rowsContainer.innerHTML = '';
+        
+        // Construire les en-têtes
+        const headerRow = document.createElement('tr');
+        headers.forEach(header => {
+            const th = document.createElement('th');
+            th.textContent = header;
+            if (header.toLowerCase() === 'email') {
+                th.innerHTML = '<i class="fa fa-envelope"></i> ' + header;
+            }
+            headerRow.appendChild(th);
+        });
+        headersContainer.appendChild(headerRow);
+        
+        // Construire les lignes
+        data.forEach((row) => {
+            const tr = document.createElement('tr');
+            headers.forEach(header => {
+                const td = document.createElement('td');
+                const value = row[header.toLowerCase()] || '';
+                td.textContent = value;
+                if (header.toLowerCase() === 'email') {
+                    td.style.fontWeight = 'bold';
+                    td.style.color = '#337ab7';
+                }
+                tr.appendChild(td);
+            });
+            rowsContainer.appendChild(tr);
+        });
+        
+        // Afficher le nombre total
+        if (totalRowsSpan) {
+            totalRowsSpan.textContent = `(${totalCount} contacts au total)`;
+        }
+        
+        // Afficher l'aperçu avec animation
+        previewContainer.style.display = 'block';
+        setTimeout(() => {
+            previewContainer.style.opacity = '1';
+        }, 50);
+        
+        // Mettre à jour le bouton d'import
+        const importBtn = document.getElementById('import-csv-contacts');
+        if (importBtn) {
+            importBtn.innerHTML = `<i class="fa fa-check"></i> Importer ${totalCount} contact${totalCount > 1 ? 's' : ''}`;
+        }
+    }
+
+    // Importer les contacts CSV
+    function importCSVContacts() {
+        if (parsedCSVData.length === 0) {
+            showError('Aucun contact à importer');
+            return;
+        }
+        
+        const manualContacts = document.querySelector('[name="campaign_form[manualContacts]"]');
+        if (!manualContacts) return;
+        
+        // Récupérer les contacts existants
+        let existingEmails = new Set();
+        if (manualContacts.value.trim()) {
+            manualContacts.value.split('\n')
+                .map(email => email.trim())
+                .filter(email => isValidEmail(email))
+                .forEach(email => existingEmails.add(email.toLowerCase()));
+        }
+        
+        // Ajouter les nouveaux emails
+        const newEmails = parsedCSVData.map(row => row.email.trim().toLowerCase());
+        const uniqueEmails = new Set([...existingEmails, ...newEmails]);
+        
+        // Mettre à jour le champ
+        manualContacts.value = Array.from(uniqueEmails).join('\n');
+        
+        // Basculer vers l'onglet manuel
+        const manualTab = document.querySelector('.contact-source-option[data-source="manual"]');
+        if (manualTab) {
+            manualTab.click();
+        }
+        
+        // Cacher l'aperçu CSV
+        const preview = document.getElementById('csv-preview');
+        if (preview) {
+            preview.style.display = 'none';
+        }
+        
+        // Réinitialiser le fichier
+        const fileInput = document.querySelector('[name="campaign_form[csvFile]"]');
+        if (fileInput) {
+            fileInput.value = '';
+        }
+        
+        parsedCSVData = [];
+        
+        // Mettre à jour le compteur
+        updateContactsCounter();
+        
+        // Afficher une notification de succès
+        const imported = newEmails.length;
+        const total = uniqueEmails.size;
+        showNotification(
+            `✓ ${imported} contacts importés avec succès! Total: ${total} contacts`,
+            'success'
+        );
+    }
+
+    // Mettre à jour le compteur de contacts
+    function updateContactsCounter() {
+        const manualContacts = document.querySelector('[name="campaign_form[manualContacts]"]');
+        
+        if (manualContacts) {
+            const emails = manualContacts.value.split('\n')
+                .map(email => email.trim())
+                .filter(email => isValidEmail(email));
+            contactsCount = new Set(emails).size; // Supprimer les doublons
+        } else {
+            contactsCount = 0;
+        }
+        
+        // Mettre à jour l'affichage
+        const contactsCountSpan = document.getElementById('contacts-count');
+        if (contactsCountSpan) {
+            contactsCountSpan.textContent = contactsCount;
+            
+            // Animation du chiffre
+            contactsCountSpan.style.transform = 'scale(1.2)';
+            setTimeout(() => {
+                contactsCountSpan.style.transform = 'scale(1)';
+            }, 200);
+        }
+        
+        updateContactProgress();
+        return contactsCount;
+    }
+
+    // Mettre à jour la barre de progression des contacts
+    function updateContactProgress() {
+        const progressBar = document.getElementById('contacts-progress');
+        if (!progressBar) return;
+        
+        const maxContacts = 1000; // Maximum recommandé
+        const percentage = Math.min(100, (contactsCount / maxContacts) * 100);
+        
+        progressBar.style.width = `${percentage}%`;
+        
+        // Changer la couleur selon le nombre
+        progressBar.className = 'progress-bar';
+        if (contactsCount === 0) {
+            progressBar.classList.add('progress-bar-danger');
+        } else if (contactsCount < 100) {
+            progressBar.classList.add('progress-bar-warning');
+        } else {
+            progressBar.classList.add('progress-bar-success');
+        }
+    }
+
+    // ============================================
+    // GESTION DU CONTENU EMAIL
+    // ============================================
+    function setupEmailContent() {
+        const subjectInput = document.querySelector('[name="campaign_form[subjectTemplate]"]');
+        const messageTextarea = document.querySelector('[name="campaign_form[customMessage]"]');
+        const previewBtn = document.getElementById('preview-email-btn');
+        const sendTestBtn = document.getElementById('send-test-email-btn');
+        const variableTags = document.querySelectorAll('.variable-tag');
+        
+        // Compteurs de caractères
+        if (subjectInput) {
+            subjectInput.addEventListener('input', function() {
+                const count = this.value.length;
+                const counter = document.getElementById('subject-char-count');
+                if (counter) {
+                    counter.textContent = `${count} caractères`;
+                    if (count > 60) {
+                        counter.style.color = '#d9534f';
+                        counter.textContent += ' (Trop long pour un sujet)';
+                    } else {
+                        counter.style.color = '#5cb85c';
+                    }
+                }
+                updateEmailPreview();
+            });
+        }
+        
+        if (messageTextarea) {
+            messageTextarea.addEventListener('input', function() {
+                const count = this.value.length;
+                const counter = document.getElementById('message-char-count');
+                if (counter) {
+                    counter.textContent = `${count} caractères`;
+                }
+                updateEmailPreview();
+            });
+        }
+        
+        // Insertion de variables
+        variableTags.forEach(tag => {
+            tag.addEventListener('click', function() {
+                const variable = this.getAttribute('data-variable');
+                if (messageTextarea) {
+                    const cursorPos = messageTextarea.selectionStart;
+                    const textBefore = messageTextarea.value.substring(0, cursorPos);
+                    const textAfter = messageTextarea.value.substring(cursorPos);
+                    messageTextarea.value = textBefore + variable + textAfter;
+                    messageTextarea.focus();
+                    messageTextarea.setSelectionRange(
+                        cursorPos + variable.length,
+                        cursorPos + variable.length
+                    );
+                    
+                    // Animation
+                    this.style.transform = 'scale(0.95)';
+                    setTimeout(() => {
+                        this.style.transform = 'scale(1)';
+                    }, 100);
+                }
+            });
+        });
+        
+        // Aperçu de l'email
+        if (previewBtn) {
+            previewBtn.addEventListener('click', showEmailPreviewModal);
+        }
+        
+        // Envoi d'email de test
+        if (sendTestBtn) {
+            sendTestBtn.addEventListener('click', sendTestEmail);
+        }
+    }
+
+    // Mettre à jour l'aperçu en temps réel
+    function updateEmailPreview() {
+        const subject = document.querySelector('[name="campaign_form[subjectTemplate]"]')?.value || '';
+        const content = document.querySelector('[name="campaign_form[customMessage]"]')?.value || '';
+        
+        const previewSubject = document.getElementById('preview-subject');
+        const previewContent = document.getElementById('preview-content');
+        const previewPanel = document.getElementById('email-preview-panel');
+        
+        if (subject || content) {
+            if (previewPanel) previewPanel.style.display = 'block';
+            if (previewSubject) previewSubject.textContent = subject || '(Pas de sujet)';
+            if (previewContent) {
+                // Remplacer les variables par des exemples
+                let previewText = content
+                    .replace(/\{\{first_name\}\}/g, 'Jean')
+                    .replace(/\{\{last_name\}\}/g, 'Dupont')
+                    .replace(/\{\{email\}\}/g, 'jean.dupont@example.com')
+                    .replace(/\{\{campaign_name\}\}/g, 'Ma Campagne')
+                    .replace(/\{\{unsubscribe_link\}\}/g, '[Lien de désinscription]');
+                
+                previewContent.innerHTML = previewText.replace(/\n/g, '<br>');
+            }
+        }
+    }
+
+    // Afficher le modal d'aperçu
+    function showEmailPreviewModal() {
+        const subject = document.querySelector('[name="campaign_form[subjectTemplate]"]')?.value || '(Pas de sujet)';
+        const content = document.querySelector('[name="campaign_form[customMessage]"]')?.value || '';
+        
+        document.getElementById('modal-preview-subject').textContent = subject;
+        
+        let previewText = content
+            .replace(/\{\{first_name\}\}/g, 'Jean')
+            .replace(/\{\{last_name\}\}/g, 'Dupont')
+            .replace(/\{\{email\}\}/g, 'jean.dupont@example.com')
+            .replace(/\{\{campaign_name\}\}/g, 'Ma Campagne')
+            .replace(/\{\{unsubscribe_link\}\}/g, '<a href="#">Se désinscrire</a>');
+        
+        document.getElementById('modal-preview-body').innerHTML = previewText.replace(/\n/g, '<br>');
+        
+        // Afficher le modal (si Bootstrap est disponible)
+        if (typeof jQuery !== 'undefined' && jQuery.fn.modal) {
+            jQuery('#email-preview-modal').modal('show');
+        }
+    }
+
+    // Envoyer un email de test
+    function sendTestEmail() {
+        const testEmailInput = document.getElementById('test-email');
+        const testEmail = testEmailInput?.value;
+        
+        if (!testEmail || !isValidEmail(testEmail)) {
+            showError('Veuillez entrer une adresse email valide');
+            testEmailInput?.focus();
+            return;
+        }
+        
+        showNotification('Envoi de l\'email de test...', 'info');
+        
+        // TODO: Implémenter l'envoi réel
+        setTimeout(() => {
+            showNotification(`Email de test envoyé à ${testEmail}`, 'success');
+        }, 1000);
+    }
+
+    // ============================================
+    // APERÇU DU WARMUP
+    // ============================================
+    function updateWarmupPreview() {
+        const startVolume = parseInt(document.querySelector('[name="campaign_form[startVolume]"]')?.value) || 20;
+        const durationDays = parseInt(document.querySelector('[name="campaign_form[durationDays]"]')?.value) || 30;
+        const dailyIncrement = parseInt(document.querySelector('[name="campaign_form[dailyIncrement]"]')?.value) || 10;
+        
+        const previewText = document.getElementById('warmup-preview-text');
+        if (previewText) {
+            let finalVolume = startVolume;
+            for (let i = 0; i < durationDays; i++) {
+                finalVolume = Math.round(finalVolume * (1 + dailyIncrement / 100));
+            }
+            
+            previewText.innerHTML = `
+                Démarrage: <strong>${startVolume} emails/jour</strong><br>
+                Après ${durationDays} jours: <strong>${finalVolume} emails/jour</strong><br>
+                Augmentation: <strong>+${dailyIncrement}% par jour</strong>
+            `;
+        }
+    }
+
+    // Écouter les changements des paramètres de warmup
+    const warmupInputs = [
+        '[name="campaign_form[startVolume]"]',
+        '[name="campaign_form[durationDays]"]',
+        '[name="campaign_form[dailyIncrement]"]'
+    ];
+    
+    warmupInputs.forEach(selector => {
+        const input = document.querySelector(selector);
+        if (input) {
+            input.addEventListener('input', debounce(updateWarmupPreview, 300));
+        }
+    });
+
+    // ============================================
+    // CALCULS ET RÉSUMÉ
+    // ============================================
+    function calculateWarmupStats() {
+        const startVolume = parseInt(document.querySelector('[name="campaign_form[startVolume]"]')?.value) || 20;
+        const durationDays = parseInt(document.querySelector('[name="campaign_form[durationDays]"]')?.value) || 30;
+        const dailyIncrement = parseInt(document.querySelector('[name="campaign_form[dailyIncrement]"]')?.value) || 10;
+        
+        let totalEmails = 0;
+        let currentVolume = startVolume;
+        
+        for (let day = 0; day < durationDays; day++) {
+            const dailyVolume = Math.min(currentVolume, contactsCount || 10000);
+            totalEmails += dailyVolume;
+            currentVolume = Math.round(currentVolume * (1 + dailyIncrement / 100));
+        }
+        
+        return { 
+            totalEmails, 
+            durationDays, 
+            startVolume, 
+            dailyIncrement,
+            finalVolume: currentVolume 
+        };
+    }
+
+    function updateSummary() {
+        updateContactsCounter();
+        
+        // Informations de base
+        const campaignName = document.querySelector('[name="campaign_form[campaignName]"]')?.value || '--';
+        const domainSelect = document.querySelector('[name="campaign_form[domain]"]');
+        const domain = domainSelect?.selectedOptions[0]?.text || '--';
+        const startDateInput = document.querySelector('[name="campaign_form[startDate]"]');
+        const startDate = startDateInput?.value ? new Date(startDateInput.value).toLocaleDateString('fr-FR') : '--';
+        const warmupTypeSelect = document.querySelector('[name="campaign_form[warmupType]"]');
+        const warmupType = warmupTypeSelect?.selectedOptions[0]?.text || '--';
+        
+        // Statistiques de warmup
+        const stats = calculateWarmupStats();
+        
+        // Mettre à jour le DOM
+        const updateElement = (id, value) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        };
+        
+        updateElement('summary-name', campaignName);
+        updateElement('summary-domain', domain);
+        updateElement('summary-start-date', startDate);
+        updateElement('summary-contacts', contactsCount);
+        updateElement('summary-duration', stats.durationDays + ' jours');
+        updateElement('summary-warmup-type', warmupType);
+        updateElement('summary-total-emails', stats.totalEmails);
+        updateElement('summary-start-volume', stats.startVolume);
+        updateElement('summary-increment', stats.dailyIncrement);
+        
+        // Barre de progression
+        const progressBar = document.getElementById('summary-progress-bar');
+        if (progressBar) {
+            const maxPossible = contactsCount * stats.durationDays;
+            const progressPercentage = maxPossible > 0 ? 
+                Math.min(100, (stats.totalEmails / maxPossible) * 100) : 0;
+            
+            progressBar.style.width = `${progressPercentage}%`;
+            const progressText = progressBar.querySelector('.progress-text');
+            if (progressText) {
+                progressText.textContent = `${Math.round(progressPercentage)}%`;
+            }
+        }
+    }
+
+    // ============================================
+    // VALIDATION
+    // ============================================
+    function validateCurrentStep() {
+        let isValid = true;
+        let errorMessage = '';
+        
+        switch (currentStep) {
+            case 1: // Informations de base
+                const campaignName = document.querySelector('[name="campaign_form[campaignName]"]');
+                const domain = document.querySelector('[name="campaign_form[domain]"]');
+                const warmupType = document.querySelector('[name="campaign_form[warmupType]"]');
+                
+                if (!campaignName?.value.trim()) {
+                    errorMessage = 'Veuillez entrer un nom de campagne';
+                    campaignName?.focus();
+                    isValid = false;
+                } else if (!domain?.value) {
+                    errorMessage = 'Veuillez sélectionner un domaine d\'envoi';
+                    domain?.focus();
+                    isValid = false;
+                } else if (!warmupType?.value) {
+                    errorMessage = 'Veuillez sélectionner un type de warmup';
+                    warmupType?.focus();
+                    isValid = false;
+                }
+                break;
+                
+            case 2: // Paramètres
+                const startDate = document.querySelector('[name="campaign_form[startDate]"]');
+                const startVolume = document.querySelector('[name="campaign_form[startVolume]"]');
+                const durationDays = document.querySelector('[name="campaign_form[durationDays]"]');
+                
+                if (!startDate?.value) {
+                    errorMessage = 'Veuillez sélectionner une date de début';
+                    startDate?.focus();
+                    isValid = false;
+                } else {
+                    const selectedDate = new Date(startDate.value);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    
+                    if (selectedDate < today) {
+                        errorMessage = 'La date de début doit être dans le futur';
+                        startDate?.focus();
+                        isValid = false;
+                    }
+                }
+                
+                if (isValid && (!startVolume?.value || parseInt(startVolume.value) < 1)) {
+                    errorMessage = 'Le volume de départ doit être au moins 1';
+                    startVolume?.focus();
+                    isValid = false;
+                }
+                
+                if (isValid && (!durationDays?.value || parseInt(durationDays.value) < 1)) {
+                    errorMessage = 'La durée doit être au moins 1 jour';
+                    durationDays?.focus();
+                    isValid = false;
+                }
+                break;
+                
+            case 3: // Contacts
+                if (contactsCount === 0) {
+                    errorMessage = 'Veuillez ajouter au moins un contact';
+                    isValid = false;
+                } else if (contactsCount < 10) {
+                    if (!confirm(`Vous n'avez que ${contactsCount} contacts. Recommandation: au moins 10 contacts. Continuer quand même?`)) {
+                        isValid = false;
+                    }
+                }
+                break;
+                
+            case 4: // Contenu
+                const subject = document.querySelector('[name="campaign_form[subjectTemplate]"]');
+                const content = document.querySelector('[name="campaign_form[customMessage]"]');
+                
+                if (!subject?.value.trim()) {
+                    errorMessage = 'Veuillez entrer un sujet d\'email';
+                    subject?.focus();
+                    isValid = false;
+                } else if (subject.value.length > 100) {
+                    errorMessage = 'Le sujet est trop long (max 100 caractères)';
+                    subject?.focus();
+                    isValid = false;
+                } else if (!content?.value.trim()) {
+                    errorMessage = 'Veuillez entrer le contenu de l\'email';
+                    content?.focus();
+                    isValid = false;
+                }
+                break;
+        }
+        
+        if (!isValid && errorMessage) {
+            showError(errorMessage);
+        }
+        
+        return isValid;
+    }
+
+    function setupFormValidation() {
+        const form = document.getElementById('campaign-form');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                if (!validateCurrentStep()) {
+                    e.preventDefault();
+                    return false;
+                }
+                
+                // Validation finale
+                for (let step = 1; step <= totalSteps; step++) {
+                    currentStep = step;
+                    if (!validateCurrentStep()) {
+                        e.preventDefault();
+                        goToStep(step);
+                        return false;
+                    }
+                }
+                
+                return true;
+            });
+        }
+    }
+
+    // ============================================
+    // UTILITAIRES
+    // ============================================
+    function isValidEmail(email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email.trim());
+    }
+
+    function showError(message) {
+        const errorContainer = document.getElementById('contact-errors');
+        const errorList = document.getElementById('error-list');
+        
+        if (errorContainer && errorList) {
+            errorList.innerHTML = `<li>${message}</li>`;
+            errorContainer.style.display = 'block';
+            
+            setTimeout(() => {
+                errorContainer.style.display = 'none';
+            }, 5000);
+        } else {
+            alert(message);
+        }
+    }
+
+    function showErrors(errors) {
+        const errorContainer = document.getElementById('contact-errors');
+        const errorList = document.getElementById('error-list');
+        
+        if (errorContainer && errorList) {
+            errorList.innerHTML = '';
+            const displayErrors = errors.slice(0, 5);
+            
+            displayErrors.forEach(error => {
+                const li = document.createElement('li');
+                li.textContent = error;
+                errorList.appendChild(li);
+            });
+            
+            if (errors.length > 5) {
+                const li = document.createElement('li');
+                li.innerHTML = `<em>... et ${errors.length - 5} autres erreurs</em>`;
+                errorList.appendChild(li);
+            }
+            
+            errorContainer.style.display = 'block';
+        }
+    }
+
+    function showNotification(message, type = 'info') {
+        // Créer une notification toast
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type} notification-toast`;
+        notification.innerHTML = `
+            <button type="button" class="close" onclick="this.parentElement.remove()">&times;</button>
+            ${message}
+        `;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            min-width: 300px;
+            animation: slideInRight 0.3s ease;
+        `;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.animation = 'slideOutRight 0.3s ease';
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+    }
+
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
+    // Auto-sauvegarde (optionnel)
+    function setupAutoSave() {
+        const form = document.getElementById('campaign-form');
+        if (!form) return;
+        
+        let autoSaveTimeout;
+        const inputs = form.querySelectorAll('input, textarea, select');
+        
+        inputs.forEach(input => {
+            input.addEventListener('change', function() {
+                clearTimeout(autoSaveTimeout);
+                autoSaveTimeout = setTimeout(() => {
+                    // TODO: Implémenter la sauvegarde automatique
+                    console.log('Auto-save triggered');
+                }, 2000);
+            });
+        });
+    }
+
+    // ============================================
+    // LANCEMENT
+    // ============================================
+    initialize();
+});
+</script>
+
+<style>
+/* ============================================
+   STYLES AMÉLIORÉS
+   ============================================ */
+
+/* Animations */
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOutRight {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+/* Container principal */
+.warmup-campaign-form {
+    padding: 20px;
+}
+
+/* Progress Steps Amélioré */
+.warmup-progress-container {
+    position: relative;
+    margin-bottom: 40px;
+}
+
+.warmup-progress-bar {
+    position: absolute;
+    top: 25px;
+    left: 10%;
+    right: 10%;
+    height: 4px;
+    background: #e0e0e0;
+    border-radius: 2px;
+    z-index: 1;
+}
+
+.warmup-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #5cb85c, #337ab7);
+    border-radius: 2px;
+    transition: width 0.5s ease;
+    width: 0%;
+}
+
+.warmup-steps {
+    display: flex;
+    justify-content: space-between;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    position: relative;
+    z-index: 2;
+}
+
+.warmup-step {
+    flex: 1;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.warmup-step .step-icon {
+    width: 50px;
+    height: 50px;
+    background: #fff;
+    border: 3px solid #e0e0e0;
+    border-radius: 50%;
+    margin: 0 auto 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: #999;
+    transition: all 0.3s ease;
+}
+
+.warmup-step .step-label {
+    font-size: 13px;
+    color: #777;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.warmup-step.active .step-icon {
+    border-color: #337ab7;
+    background: #337ab7;
+    color: #fff;
+    transform: scale(1.1);
+}
+
+.warmup-step.active .step-label {
+    color: #337ab7;
+    font-weight: 700;
+}
+
+.warmup-step.completed .step-icon {
+    border-color: #5cb85c;
+    background: #5cb85c;
+    color: #fff;
+}
+
+.warmup-step.completed .step-label {
+    color: #5cb85c;
+}
+
+.warmup-step:hover:not(.active) .step-icon {
+    transform: scale(1.05);
+    border-color: #999;
+}
+
+/* Step Content */
+.step-content {
+    display: none;
+    opacity: 0;
+    transform: translateX(-20px);
+    transition: all 0.3s ease;
+}
+
+.step-content.active {
+    display: block;
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.step-header {
+    margin-bottom: 30px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+.step-header h4 {
+    margin: 0 0 10px;
+    color: #333;
+    font-size: 24px;
+}
+
+.step-header p {
+    margin: 0;
+    font-size: 14px;
+}
+
+/* Settings Groups */
+.settings-group {
+    background: #f9f9f9;
+    padding: 20px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+.settings-group h5 {
+    margin-top: 0;
+    color: #337ab7;
+    font-weight: 600;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+/* Contact Source Tabs */
+.list-group-item.contact-source-option {
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border-left: 4px solid transparent;
+}
+
+.list-group-item.contact-source-option:hover {
+    background-color: #f5f5f5;
+    border-left-color: #337ab7;
+}
+
+.list-group-item.contact-source-option.active {
+    background-color: #337ab7;
+    border-color: #337ab7;
+    color: white;
+}
+
+.list-group-item.contact-source-option.active small {
+    color: rgba(255,255,255,0.8);
+}
+
+.source-icon {
+    text-align: center;
+    margin-bottom: 10px;
+    color: #337ab7;
+}
+
+.list-group-item.contact-source-option.active .source-icon {
+    color: white;
+}
+
+/* Contact Stats */
+.contact-stats {
+    margin-top: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.stat-icon {
+    color: #5cb85c;
+    margin-bottom: 15px;
+}
+
+.stat-number {
+    font-size: 48px;
+    font-weight: 700;
+    color: #5cb85c;
+    margin: 10px 0;
+    transition: transform 0.2s ease;
+}
+
+.stat-label {
+    color: #777;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Contact Input */
+.contact-input-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.contact-input-header h5 {
+    margin: 0;
+    color: #333;
+}
+
+.contact-textarea {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.contact-validation-results {
+    animation: slideInRight 0.3s ease;
+}
+
+/* CSV Upload Area */
+.csv-upload-area {
+    border: 3px dashed #ddd;
+    border-radius: 8px;
+    padding: 40px;
+    text-align: center;
+    transition: all 0.3s ease;
+    background: #fafafa;
+}
+
+.csv-upload-area.dragover {
+    border-color: #337ab7;
+    background: #e3f2fd;
+}
+
+.upload-icon {
+    color: #999;
+    margin-bottom: 20px;
+}
+
+.csv-upload-area:hover {
+    border-color: #999;
+}
+
+/* CSV Preview */
+.csv-preview-table {
+    max-height: 400px;
+    overflow-y: auto;
+    margin-top: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.csv-preview-table table {
+    margin-bottom: 0;
+}
+
+/* Email Tools */
+.email-tools-panel {
+    background: #f9f9f9;
+    padding: 20px;
+    border-radius: 6px;
+    position: sticky;
+    top: 20px;
+}
+
+.email-tools-panel h5 {
+    margin-top: 0;
+    color: #337ab7;
+}
+
+/* Variable Tags */
+.variable-tags {
+    margin-top: 10px;
+}
+
+.variable-tag {
+    cursor: pointer;
+    margin: 3px;
+    padding: 6px 12px;
+    display: inline-block;
+    transition: all 0.2s ease;
+    background: #5bc0de;
+    border: none;
+}
+
+.variable-tag:hover {
+    background: #31b0d5;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+/* Email Preview */
+.email-preview {
+    margin-top: 20px;
+    padding: 15px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.preview-frame {
+    background: #fafafa;
+    padding: 15px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.preview-subject {
+    font-weight: 700;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.preview-content {
+    color: #666;
+    line-height: 1.6;
+}
+
+/* Summary Tables */
+.summary-table th {
+    background: #f5f5f5;
+    font-weight: 600;
+}
+
+.summary-table td {
+    font-size: 15px;
+}
+
+.text-bold {
+    font-weight: 700;
+}
+
+/* Projection Stats */
+.projection-stats {
+    padding: 20px 0;
+}
+
+.stat-item {
+    margin-bottom: 30px;
+}
+
+.stat-value {
+    font-size: 56px;
+    font-weight: 700;
+    color: #337ab7;
+    margin: 15px 0;
+}
+
+.stat-description {
+    color: #777;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.progress-section {
+    margin: 30px 0;
+}
+
+.progress-section label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: 600;
+    color: #555;
+}
+
+.progress-text {
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.projection-details {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f9f9f9;
+    border-radius: 4px;
+}
+
+.detail-item {
+    padding: 8px 0;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.detail-item:last-child {
+    border-bottom: none;
+}
+
+/* Email Preview Modal */
+.email-preview-frame {
+    background: #fafafa;
+    padding: 20px;
+    border-radius: 4px;
+    min-height: 300px;
+}
+
+.email-header {
+    padding-bottom: 15px;
+    margin-bottom: 15px;
+    font-size: 16px;
+}
+
+.email-body {
+    background: white;
+    padding: 20px;
+    border-radius: 4px;
+    min-height: 200px;
+    line-height: 1.8;
+}
+
+/* Form Controls */
+.form-control:focus {
+    border-color: #337ab7;
+    box-shadow: 0 0 0 0.2rem rgba(51, 122, 183, 0.25);
+}
+
+/* Buttons */
+.btn {
+    transition: all 0.2s ease;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .warmup-steps {
+        flex-direction: column;
+    }
+    
+    .warmup-step {
+        margin-bottom: 20px;
+    }
+    
+    .warmup-progress-bar {
+        display: none;
+    }
+    
+    .contact-input-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .contact-input-header .btn-group {
+        margin-top: 10px;
+    }
+}
+
+/* Utility Classes */
+.mb-0 { margin-bottom: 0 !important; }
+.mb-3 { margin-bottom: 15px !important; }
+.mb-4 { margin-bottom: 20px !important; }
+.mt-2 { margin-top: 10px !important; }
+.mt-3 { margin-top: 15px !important; }
+.d-block { display: block !important; }
+.text-center { text-align: center !important; }
+</style>
+{% endblock %}

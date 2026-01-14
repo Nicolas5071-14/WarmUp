@@ -1,512 +1,859 @@
 {% extends '@MauticCore/Default/content.html.twig' %}
 
+
 {% block headerTitle %}
-    {% if isEdit %}
-        Modifier la campagne : {{ campaign.campaignName }}
-    {% else %}
-        Créer une nouvelle campagne
-    {% endif %}
+	{% if isEdit %}
+		{{ 'Edit Campaign'|trans }}
+	{% else %}
+		{{ 'New Campaign'|trans }}
+	{% endif %}
+{% endblock %}
+
+{% block mauticContent %}warmup_campaign
 {% endblock %}
 
 {% block content %}
-<div class="warmup-campaign-form">
-    {{ form_start(form, {
-        'attr': {
-            'id': 'campaignForm',
-            'class': 'form-horizontal',
-            'data-toggle': 'ajax',
-            'data-spinner': 'campaign_form_spinner'
-        }
-    }) }}
-    
-    <div class="row">
-        <div class="col-md-12">
-            <div class="panel panel-default">
-                <div class="panel-heading">
-                    <h3 class="panel-title">Informations de base</h3>
-                </div>
-                <div class="panel-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            {{ form_row(form.campaignName) }}
-                        </div>
-                        <div class="col-md-6">
-                            {{ form_row(form.domain) }}
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-12">
-                            {{ form_row(form.description) }}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="row">
-        <div class="col-md-12">
-            <div class="panel panel-default">
-                <div class="panel-heading">
-                    <h3 class="panel-title">Planning</h3>
-                </div>
-                <div class="panel-body">
-                    <div class="row">
-                        <div class="col-md-4">
-                            {{ form_row(form.startDate) }}
-                        </div>
-                        <div class="col-md-4">
-                            {{ form_row(form.sendTime) }}
-                        </div>
-                        <div class="col-md-4">
-                            {{ form_row(form.sendFrequency) }}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="row">
-        <div class="col-md-12">
-            <div class="panel panel-default">
-                <div class="panel-heading">
-                    <h3 class="panel-title">Paramètres de warmup</h3>
-                </div>
-                <div class="panel-body">
-                    <div class="row">
-                        <div class="col-md-4">
-                            {{ form_row(form.warmupType) }}
-                        </div>
-                        <div class="col-md-4">
-                            {{ form_row(form.startVolume) }}
-                        </div>
-                        <div class="col-md-4">
-                            {{ form_row(form.durationDays) }}
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-4">
-                            {{ form_row(form.dailyIncrement) }}
-                        </div>
-                        <div class="col-md-4">
-                            {{ form_row(form.enableWeekends) }}
-                        </div>
-                        <div class="col-md-4">
-                            {{ form_row(form.enableRandomization) }}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="row">
-        <div class="col-md-12">
-            <div class="panel panel-default">
-                <div class="panel-heading">
-                    <h3 class="panel-title">Contacts</h3>
-                </div>
-                <div class="panel-body">
-                    {{ form_row(form.contactSource) }}
-                    
-                    <div id="manualContactsSection" style="{{ form.contactSource.vars.value == 'manual' ? '' : 'display: none;' }}">
-                        {{ form_row(form.manualContacts) }}
-                    </div>
-                    
-                    <div id="mauticContactsSection" style="{{ form.contactSource.vars.value == 'mautic' ? '' : 'display: none;' }}">
-                        {{ form_row(form.segmentId) }}
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="row">
-        <div class="col-md-12">
-            <div class="panel panel-default">
-                <div class="panel-heading">
-                    <h3 class="panel-title">Contenu de l'email</h3>
-                </div>
-                <div class="panel-body">
-                    {{ form_row(form.subjectTemplate) }}
-                    
-                    <div class="form-group">
-                        <label class="control-label">Variables disponibles :</label>
-                        <div class="help-block">
-                            <span class="variable-tag" data-variable="{{ '{{first_name}}' }}">{{ '{{first_name}}' }}</span>
-                            <span class="variable-tag" data-variable="{{ '{{last_name}}' }}">{{ '{{last_name}}' }}</span>
-                            <span class="variable-tag" data-variable="{{ '{{email}}' }}">{{ '{{email}}' }}</span>
-                            <span class="variable-tag" data-variable="{{ '{{unsubscribe_link}}' }}">{{ '{{unsubscribe_link}}' }}</span>
-                            <span class="variable-tag" data-variable="{{ '{{campaign_name}}' }}">{{ '{{campaign_name}}' }}</span>
-                        </div>
-                    </div>
-                    
-                    {{ form_row(form.customMessage) }}
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="form-actions text-right">
-        <a href="{{ path('warmup_campaign_index') }}" class="btn btn-default">
-            <i class="fa fa-times"></i> Annuler
-        </a>
-        <button type="submit" name="save" class="btn btn-primary">
-            <i class="fa fa-save"></i> 
-            {% if isEdit %}
-                Mettre à jour
-            {% else %}
-                Créer
-            {% endif %}
-        </button>
-        <button type="submit" name="saveAndActivate" class="btn btn-success">
-            <i class="fa fa-play"></i> 
-            {% if isEdit %}
-                Mettre à jour et activer
-            {% else %}
-                Créer et activer
-            {% endif %}
-        </button>
-    </div>
-    
-    {{ form_end(form) }}
-</div>
-{% endblock %}
+	<div
+		class="warmup-campaign-form">
+		 <script>
+																																																																							// S'assurer que window.warmupFormulas est bien défini
+																																																																				window.warmupFormulas = {{ warmupFormulas|json_encode|raw }};
+																																																																				
+																																																																				// Ajouter des données aux options de warmupType
+																																																																				document.addEventListener('DOMContentLoaded', function () { // Injecter les données dans les options du select
+																																																																				const warmupTypeSelect = document.querySelector('[name="campaign_form[warmupType]"]');
+																																																																				if (warmupTypeSelect && window.warmupFormulas) {
+																																																																				Array.from(warmupTypeSelect.options).forEach(option => {
+																																																																				const formula = window.warmupFormulas[option.value];
+																																																																				if (formula) {
+																																																																				option.setAttribute('data-formula-type', formula.formulaType);
+																																																																				option.setAttribute('data-default-start', formula.defaultStartVolume);
+																																																																				option.setAttribute('data-default-duration', formula.defaultDurationDays);
+																																																																				option.setAttribute('data-default-increment', formula.defaultIncrementPercentage);
+																																																																				}
+																																																																				});
+																																																																				}
+																																																																				});
+																																																																						</script>
+		<div class="panel panel-default">
+			<div class="panel-heading">
+				<h3 class="panel-title">
+					{% if isEdit %}
+						{{ 'Edit Campaign'|trans }}
+					{% else %}
+						{{ 'Create New Campaign'|trans }}
+					{% endif %}
+				</h3>
+			</div>
 
-{% block contentFooter %}
-<script>
-(function() {
-    'use strict';
-    
-    Mautic.onPageLoad(function(container, response) {
-        // Initialiser les écouteurs d'événements
-        initCampaignForm();
-    });
-    
-    function initCampaignForm() {
-        var contactSourceSelect = mQuery('[name="campaign_form[contactSource]"]');
-        var manualSection = mQuery('#manualContactsSection');
-        var mauticSection = mQuery('#mauticContactsSection');
-        
-        if (contactSourceSelect.length) {
-            // Initialiser l'état
-            toggleContactSections(contactSourceSelect.val());
-            
-            // Ajouter l'écouteur
-            contactSourceSelect.on('change', function() {
-                toggleContactSections(mQuery(this).val());
-            });
-        }
-        
-        // Variables cliquables
-        mQuery('.variable-tag').on('click', function() {
-            var variable = mQuery(this).data('variable');
-            var textarea = mQuery('[name="campaign_form[customMessage]"]');
-            
-            if (textarea.length) {
-                var currentValue = textarea.val();
-                var cursorPos = textarea.prop('selectionStart');
-                var textBefore = currentValue.substring(0, cursorPos);
-                var textAfter = currentValue.substring(cursorPos);
-                
-                textarea.val(textBefore + variable + textAfter).trigger('change');
-                
-                // Replacer le curseur
-                var newPos = cursorPos + variable.length;
-                textarea.prop('selectionStart', newPos);
-                textarea.prop('selectionEnd', newPos);
-                textarea.focus();
-            }
-        });
-        
-        // Heure par défaut
-        var sendTimeInput = mQuery('[name="campaign_form[sendTime]"]');
-        if (sendTimeInput.length && !sendTimeInput.val()) {
-            sendTimeInput.val('09:00');
-        }
-        
-        // Date par défaut (demain)
-        var startDateInput = mQuery('[name="campaign_form[startDate]"]');
-        if (startDateInput.length && !startDateInput.val()) {
-            var tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            
-            // Format YYYY-MM-DD
-            var year = tomorrow.getFullYear();
-            var month = String(tomorrow.getMonth() + 1).padStart(2, '0');
-            var day = String(tomorrow.getDate()).padStart(2, '0');
-            
-            startDateInput.val(year + '-' + month + '-' + day);
-        }
-        
-        // Validation des emails manuels
-        var validateEmailsBtn = mQuery('<button type="button" class="btn btn-default btn-sm" style="margin-top: 5px;">');
-        validateEmailsBtn.html('<i class="fa fa-check"></i> Valider les emails');
-        
-        if (manualSection.length) {
-            manualSection.find('.form-group:last').append(validateEmailsBtn);
-            
-            validateEmailsBtn.on('click', function() {
-                var textarea = mQuery('[name="campaign_form[manualContacts]"]');
-                if (!textarea.length) return;
-                
-                var emails = textarea.val().split('\n');
-                var validCount = 0;
-                var invalidEmails = [];
-                
-                emails.forEach(function(email) {
-                    email = email.trim();
-                    if (email) {
-                        var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                        if (emailRegex.test(email)) {
-                            validCount++;
-                        } else {
-                            invalidEmails.push(email);
-                        }
-                    }
-                });
-                
-                var message = validCount + ' email(s) valide(s) trouvé(s)';
-                var type = 'success';
-                
-                if (invalidEmails.length > 0) {
-                    message = validCount + ' email(s) valide(s), ' + invalidEmails.length + ' invalide(s)';
-                    type = 'warning';
-                }
-                
-                Mautic.showNotification(message, type);
-            });
-        }
-        
-        // Calcul du plan de warmup
-        var calculateBtn = mQuery('<button type="button" class="btn btn-info" style="margin-top: 15px;">');
-        calculateBtn.html('<i class="fa fa-calculator"></i> Calculer le plan de warmup');
-        
-        var warmupPanel = mQuery('.panel:has([name="campaign_form[warmupType]"])');
-        if (warmupPanel.length) {
-            warmupPanel.append(calculateBtn);
-            
-            calculateBtn.on('click', function() {
-                var totalContacts = getTotalContacts();
-                var durationDays = mQuery('[name="campaign_form[durationDays]"]').val();
-                var warmupType = mQuery('[name="campaign_form[warmupType]"]').val();
-                var startVolume = mQuery('[name="campaign_form[startVolume]"]').val();
-                var dailyIncrement = mQuery('[name="campaign_form[dailyIncrement]"]').val();
-                
-                if (!totalContacts || totalContacts === 0) {
-                    Mautic.showNotification('Veuillez d\'abord ajouter des contacts', 'warning');
-                    return;
-                }
-                
-                if (!durationDays || !warmupType || !startVolume) {
-                    Mautic.showNotification('Veuillez remplir tous les paramètres de warmup', 'warning');
-                    return;
-                }
-                
-                Mautic.startPageLoadingBar();
-                
-                mQuery.ajax({
-                    url: '{{ path("warmup_campaign_calculate_warmup") }}',
-                    type: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify({
-                        totalContacts: totalContacts,
-                        durationDays: durationDays,
-                        warmupType: warmupType,
-                        startVolume: startVolume,
-                        increasePerDay: dailyIncrement
-                    }),
-                    success: function(response) {
-                        Mautic.stopPageLoadingBar();
-                        
-                        if (response.success) {
-                            showWarmupPlan(response.plan, response.stats);
-                        } else {
-                            Mautic.showNotification(response.message, 'error');
-                        }
-                    },
-                    error: function(xhr) {
-                        Mautic.stopPageLoadingBar();
-                        Mautic.showNotification('Erreur lors du calcul', 'error');
-                    }
-                });
-            });
-        }
-        
-        // Tester l'email
-        var testEmailBtn = mQuery('<button type="button" class="btn btn-warning" style="margin-top: 15px;">');
-        testEmailBtn.html('<i class="fa fa-paper-plane"></i> Tester l\'email');
-        
-        var contentPanel = mQuery('.panel:has([name="campaign_form[customMessage]"])');
-        if (contentPanel.length) {
-            contentPanel.append(testEmailBtn);
-            
-            testEmailBtn.on('click', function() {
-                var domain = mQuery('[name="campaign_form[domain]"]').val();
-                var subject = mQuery('[name="campaign_form[subjectTemplate]"]').val();
-                var message = mQuery('[name="campaign_form[customMessage]"]').val();
-                
-                if (!domain) {
-                    Mautic.showNotification('Veuillez sélectionner un domaine', 'warning');
-                    return;
-                }
-                
-                if (!subject || !message) {
-                    Mautic.showNotification('Veuillez remplir le sujet et le contenu', 'warning');
-                    return;
-                }
-                
-                var testEmail = prompt('Entrez l\'adresse email de test:', 'test@example.com');
-                
-                if (!testEmail || !isValidEmail(testEmail)) {
-                    Mautic.showNotification('Adresse email invalide', 'warning');
-                    return;
-                }
-                
-                Mautic.startPageLoadingBar();
-                
-                mQuery.ajax({
-                    url: '{{ path("warmup_campaign_send_test_email") }}',
-                    type: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify({
-                        testEmail: testEmail,
-                        domainId: domain,
-                        subject: subject,
-                        message: message
-                    }),
-                    success: function(response) {
-                        Mautic.stopPageLoadingBar();
-                        
-                        if (response.success) {
-                            Mautic.showNotification('Email de test envoyé avec succès!', 'success');
-                        } else {
-                            Mautic.showNotification('Erreur: ' + response.message, 'error');
-                        }
-                    },
-                    error: function(xhr) {
-                        Mautic.stopPageLoadingBar();
-                        Mautic.showNotification('Erreur lors de l\'envoi du test', 'error');
-                    }
-                });
-            });
-        }
-    }
-    
-    function toggleContactSections(source) {
-        var manualSection = mQuery('#manualContactsSection');
-        var mauticSection = mQuery('#mauticContactsSection');
-        
-        if (source === 'manual') {
-            manualSection.show();
-            mauticSection.hide();
-        } else if (source === 'mautic') {
-            manualSection.hide();
-            mauticSection.show();
-        }
-    }
-    
-    function getTotalContacts() {
-        var contactSource = mQuery('[name="campaign_form[contactSource]"]').val();
-        var total = 0;
-        
-        if (contactSource === 'manual') {
-            var textarea = mQuery('[name="campaign_form[manualContacts]"]');
-            if (textarea.length) {
-                var emails = textarea.val().split('\n');
-                emails.forEach(function(email) {
-                    email = email.trim();
-                    if (email && isValidEmail(email)) {
-                        total++;
-                    }
-                });
-            }
-        } else if (contactSource === 'mautic') {
-            // Ici vous pourriez ajouter une requête AJAX pour obtenir le nombre de contacts
-            // Pour l'instant, retourner 0
-            total = 0;
-        }
-        
-        return total;
-    }
-    
-    function isValidEmail(email) {
-        var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return emailRegex.test(email);
-    }
-    
-    function showWarmupPlan(plan, stats) {
-        var html = '<div class="well" style="margin-top: 15px;">';
-        html += '<h4>Plan de warmup calculé</h4>';
-        html += '<p><strong>Total d\'emails:</strong> ' + stats.total + '</p>';
-        html += '<p><strong>Moyenne par jour:</strong> ' + stats.average + '</p>';
-        html += '<p><strong>Min/Max:</strong> ' + stats.min + ' / ' + stats.max + '</p>';
-        
-        html += '<div style="max-height: 200px; overflow-y: auto; margin-top: 10px;">';
-        html += '<table class="table table-sm table-bordered">';
-        html += '<thead><tr><th>Jour</th><th>Emails</th><th>Cumul</th></tr></thead>';
-        html += '<tbody>';
-        
-        var cumulative = 0;
-        plan.forEach(function(day) {
-            cumulative += day.emails;
-            html += '<tr>';
-            html += '<td>Jour ' + day.day + '</td>';
-            html += '<td>' + day.emails + '</td>';
-            html += '<td>' + cumulative + '</td>';
-            html += '</tr>';
-        });
-        
-        html += '</tbody></table></div></div>';
-        
-        // Supprimer l'ancien affichage s'il existe
-        mQuery('#warmupPlanResult').remove();
-        
-        // Ajouter le nouveau
-        var calculateBtn = mQuery('.btn:contains("Calculer le plan de warmup")');
-        if (calculateBtn.length) {
-            calculateBtn.after('<div id="warmupPlanResult">' + html + '</div>');
-        }
-    }
-})();
-</script>
 
-<style>
-.warmup-campaign-form .panel {
-    margin-bottom: 20px;
+			{{ form_start(form, {'attr': {'id': 'campaign-form', 'novalidate': 'novalidate',
+			
+			 'action': path('warmup_campaign_save'),
+        'method': 'POST'}}) }}
+
+			{{ form_widget(form._token) }}
+
+			{# Champs cachés - NE PAS DUPLIQUER #}
+			{{ form_widget(form.totalContacts, {'attr': {'id': 'campaign_form_totalContacts'}}) }}
+			{{ form_widget(form.sequenceType, {'attr': {'id': 'sequence_type_field'}}) }}
+			{{ form_widget(form.emailSequences, {'attr': {'id': 'email_sequences_data'}}) }}
+
+			<div
+				class="panel-body">
+				<!-- Progress Steps -->
+				<div class="steps-container">
+					<div class="steps">
+						<div class="step active" data-step="1">
+							<div class="step-number">1</div>
+							<div class="step-label">{{ 'Basics'|trans }}</div>
+						</div>
+						<div class="step" data-step="2">
+							<div class="step-number">2</div>
+							<div class="step-label">{{ 'Contacts'|trans }}</div>
+						</div>
+						<div class="step" data-step="3">
+							<div class="step-number">3</div>
+							<div class="step-label">{{ 'Warmup Setup'|trans }}</div>
+						</div>
+						<div class="step" data-step="4">
+							<div class="step-number">4</div>
+							<div class="step-label">{{ 'Content'|trans }}</div>
+						</div>
+						<div class="step" data-step="5">
+							<div class="step-number">5</div>
+							<div class="step-label">{{ 'Review'|trans }}</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Step 1: Basic Information -->
+				<div class="step-content" id="step-1">
+					<h4>{{ 'Basic Information'|trans }}</h4>
+					<hr>
+
+					<div class="row">
+						<div class="col-md-6">
+							{{ form_row(form.campaignName, {
+								'label': 'Campaign Name'|trans,
+								'attr': {'class': 'form-control', 'placeholder': 'Enter campaign name'}
+							}) }}
+							<p class="help-block">{{ 'Give your campaign a descriptive name'|trans }}</p>
+						</div>
+
+						<div class="col-md-6">
+							{{ form_row(form.domain, {
+								'label': 'Sending Domain'|trans,
+								'attr': {'class': 'form-control', 'required': 'required'}
+							}) }}
+							<p class="help-block">{{ 'Select the sending domain for this campaign'|trans }}</p>
+						</div>
+					</div>
+
+					<div class="row">
+						<div class="col-md-12">
+							{{ form_row(form.description, {
+								'label': 'Description'|trans,
+								'attr': {'class': 'form-control', 'rows': 3, 'placeholder': 'Optional campaign description'}
+							}) }}
+						</div>
+					</div>
+
+					<div class="row">
+						<div class="col-md-6">
+							<div class="form-group">
+								<label>{{ 'Schedule'|trans }}</label>
+								{{ form_row(form.startDate, {
+									'label': 'Start Date'|trans,
+									'attr': {'class': 'form-control', 'type': 'datetime-local'}
+								}) }}
+
+								{{ form_row(form.sendTime, {
+									'label': 'Send Time'|trans,
+									'attr': {'class': 'form-control', 'type': 'time'}
+								}) }}
+								<p class="help-block">{{ 'Toronto Time (EST/EDT)'|trans }}</p>
+							</div>
+						</div>
+
+						<div class="col-md-6">
+							<div class="form-group">
+								<label>{{ 'Sending Options'|trans }}</label>
+
+								{{ form_row(form.sendFrequency, {
+									'label': 'Frequency'|trans,
+									'attr': {'class': 'form-control'}
+								}) }}
+
+								<div class="checkbox">
+									<label>
+										{{ form_widget(form.enableWeekends) }}
+										{{ 'Send on Weekends'|trans }}
+									</label>
+								</div>
+
+								<div class="checkbox">
+									<label>
+										{{ form_widget(form.enableRandomization) }}
+										{{ 'Enable Randomization'|trans }}
+									</label>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Step 2: Contacts -->
+				<div class="step-content" style="display:none;" id="step-2">
+					<h4>{{ 'Contacts'|trans }}</h4>
+					<hr>
+
+					<div class="row">
+						<div class="col-md-4">
+							<h5>{{ 'Source Type'|trans }}</h5>
+
+							<div class="list-group">
+								<a href="#" class="list-group-item contact-source-option active" data-source="manual">
+									<h5 class="list-group-item-heading">{{ 'Manual Input'|trans }}</h5>
+									<p class="list-group-item-text">{{ 'Enter emails manually'|trans }}</p>
+								</a>
+
+								<a href="#" class="list-group-item contact-source-option" data-source="mautic">
+									<h5 class="list-group-item-heading">{{ 'Mautic Segment'|trans }}</h5>
+									<p class="list-group-item-text">{{ 'Import from existing segment'|trans }}</p>
+								</a>
+
+								<a href="#" class="list-group-item contact-source-option" data-source="csv">
+									<h5 class="list-group-item-heading">{{ 'CSV Import'|trans }}</h5>
+									<p class="list-group-item-text">{{ 'Upload CSV file'|trans }}</p>
+								</a>
+							</div>
+						</div>
+
+						<div
+							class="col-md-8">
+							<!-- Manual Contacts -->
+							<div id="manual-contacts-section" class="contacts-section">
+								<h5>{{ 'Manual Email Entry'|trans }}</h5>
+								{{ form_row(form.manualContacts, {
+									'label': false,
+									'attr': {'class': 'form-control', 'rows': 10, 'placeholder': 'email1@example.com\nemail2@example.com\nemail3@example.com'}
+								}) }}
+								<p class="help-block">{{ 'Enter one email per line'|trans }}</p>
+							</div>
+
+							<!-- Mautic Segment -->
+							<div id="mautic-segment-section" class="contacts-section" style="display:none;">
+								<h5>{{ 'Select Mautic Segment'|trans }}</h5>
+								<div class="form-group">
+									<div class="input-group">
+										{{ form_widget(form.segmentId, {'attr': {'class': 'form-control', 'placeholder': 'Segment ID'}}) }}
+										<span class="input-group-btn">
+											<button type="button" id="browse-segments-btn" class="btn btn-default">
+												{{ 'Browse'|trans }}
+											</button>
+										</span>
+									</div>
+									<p class="help-block">{{ 'Enter segment ID or browse available segments'|trans }}</p>
+								</div>
+
+								<div id="segment-preview" style="display:none;"></div>
+							</div>
+
+							<!-- CSV Import Section -->
+							<div id="csv-import-section" class="contacts-section" style="display:none;">
+								<h5>{{ 'Upload CSV File'|trans }}</h5>
+								{{ form_row(form.csvFile, {
+									'label': false,
+									'attr': {'class': 'form-control', 'accept': '.csv'}
+								}) }}
+								<p class="help-block">
+									{{ 'CSV format: email,first_name,last_name (header required)'|trans }}<br>
+									{{ 'Max file size: 1MB'|trans }}
+								</p>
+
+								<div id="csv-upload-progress" class="progress" style="display: none;">
+									<div class="progress-bar progress-bar-striped active" style="width: 100%">Processing CSV...</div>
+								</div>
+
+								<div id="csv-preview" style="display:none;">
+									<div class="alert alert-success">
+										<strong>CSV Preview</strong>
+										<button type="button" class="close" onclick="window.clearCsvPreview()">&times;</button>
+									</div>
+									<div class="table-responsive">
+										<table class="table table-striped table-condensed" id="csv-preview-table">
+											<thead>
+												<tr>
+													<th>Email</th>
+													<th>First Name</th>
+													<th>Last Name</th>
+												</tr>
+											</thead>
+											<tbody id="csv-preview-body"></tbody>
+										</table>
+									</div>
+									<div class="text-center">
+										<p id="csv-total-contacts">0 contacts found</p>
+										<button type="button" class="btn btn-success btn-sm" onclick="window.confirmCsvImport()">
+											{{ 'Confirm Import'|trans }}
+										</button>
+									</div>
+								</div>
+							</div>
+
+							<div id="contacts-counter" class="alert alert-info" style="display:none;">
+								<strong>
+									<span id="contacts-count">0</span>
+									{{ 'contacts ready'|trans }}
+								</strong>
+								<p>{{ 'These contacts will be imported into the campaign'|trans }}</p>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Step 3: Warmup Setup -->
+				<div class="step-content" style="display:none;" id="step-3">
+					<h4>{{ 'Warmup Setup'|trans }}</h4>
+					<hr>
+
+					<div class="row">
+						<div class="col-md-6">
+							<h5>{{ 'Warmup Configuration'|trans }}</h5>
+
+							{{ form_row(form.warmupType, {
+								'label': 'Warmup Type'|trans,
+								'attr': {'class': 'form-control', 'required': 'required'}
+							}) }}
+							<p class="help-block">{{ 'Choose how to increase email volume over time'|trans }}</p>
+
+							<div class="row">
+								<div class="col-md-6">
+									<div class="form-group">
+										<label>{{ 'Start Volume'|trans }}</label>
+										<div class="input-group">
+											{{ form_widget(form.startVolume, {'attr': {'class': 'form-control', 'min': 1, 'max': 1000}}) }}
+											<span class="input-group-addon">emails/day</span>
+										</div>
+										{{ form_errors(form.startVolume) }}
+										<p class="help-block">{{ 'Minimum emails to send per day'|trans }}</p>
+									</div>
+								</div>
+
+								<div class="col-md-6">
+									<div class="form-group">
+										<label>{{ 'Duration'|trans }}</label>
+										<div class="input-group">
+											{{ form_widget(form.durationDays, {'attr': {'class': 'form-control', 'min': 1, 'max': 90}}) }}
+											<span class="input-group-addon">days</span>
+										</div>
+										{{ form_errors(form.durationDays) }}
+										<p class="help-block">{{ 'Total campaign duration'|trans }}</p>
+									</div>
+								</div>
+							</div>
+
+							<div class="form-group">
+								<label>{{ 'Daily Increment'|trans }}</label>
+								<div class="input-group">
+									{{ form_widget(form.dailyIncrement, {'attr': {'class': 'form-control', 'min': 0, 'max': 100}}) }}
+									<span class="input-group-addon">%</span>
+								</div>
+								{{ form_errors(form.dailyIncrement) }}
+								<p class="help-block">{{ 'Daily percentage increase in email volume'|trans }}</p>
+							</div>
+
+							<div class="form-group">
+								<button type="button" id="preview-warmup-btn" class="btn btn-info btn-block">
+									<i class="ri-eye-line ri-fw"></i>
+									{{ 'Preview Warmup Plan'|trans }}
+								</button>
+							</div>
+						</div>
+
+						<div class="col-md-6">
+							<h5>{{ 'Campaign Statistics'|trans }}</h5>
+
+							<div class="well" style="margin-top: 10px; padding: 15px;">
+								<div class="progress" style="height: 20px;">
+									<div id="warmup-progress-bar" class="progress-bar progress-bar-success progress-bar-striped" role="progressbar" style="width: 0%"></div>
+								</div>
+								<p class="text-center" style="margin-top: 10px;">
+									<span id="total-emails" style="font-size: 18px; font-weight: bold; color: #5cb85c;">0</span>
+									{{ 'emails over'|trans }}
+									<span id="total-days" style="font-weight: bold;">0</span>
+									{{ 'days'|trans }}
+								</p>
+								<div id="campaign-plan-summary" style="display: none; margin-top: 10px;">
+									<div id="campaign-plan-content" class="text-small"></div>
+								</div>
+							</div>
+
+							<div id="campaign-plan-details" class="alert alert-info" style="display: none; margin-top: 15px;">
+								<h5 style="margin-top: 0;">Campaign Plan Details</h5>
+								<div id="campaign-details-content"></div>
+							</div>
+
+							<div class="alert alert-warning">
+								<p>
+									<strong>Note:</strong>
+									{{ 'Each contact will receive only 1 email. The system will calculate the daily volume automatically based on total contacts and duration.'|trans }}
+								</p>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Step 4: Email Content -->
+				<div class="step-content" style="display:none;" id="step-4">
+					<h4>{{ 'Email Content'|trans }}</h4>
+					<hr>
+
+					<div class="row">
+						<div class="col-md-12">
+							<div class="form-group">
+								<label>{{ 'Email Sequence Type'|trans }}</label>
+								<div class="well" style="padding: 15px;">
+									<label class="radio-inline">
+										<input type="radio" name="sequence_type_ui" value="single" checked>
+										{{ 'Single Email (same email to all contacts)'|trans }}
+									</label>
+									<label class="radio-inline">
+										<input type="radio" name="sequence_type_ui" value="multiple">
+										{{ 'Multiple Emails (different email each day)'|trans }}
+									</label>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Single Email Section -->
+					<div id="single-email-section">
+						<div class="row">
+							<div class="col-md-8">
+								{{ form_row(form.subjectTemplate, {
+									'label': 'Subject'|trans,
+									'attr': {'class': 'form-control', 'placeholder': 'Enter email subject'}
+								}) }}
+
+								{{ form_row(form.customMessage, {
+									'label': 'Email Body'|trans,
+									'attr': {'class': 'form-control', 'rows': 12, 'placeholder': 'Enter your email content'}
+								}) }}
+								<p class="help-block">
+									<strong>{{ 'Available variables:'|trans }}</strong>
+									<code>{{ '{{first_name}}' }}</code>
+									<code>{{ '{{last_name}}' }}</code>
+									<code>{{ '{{email}}' }}</code>
+									<code>{{ '{{campaign_name}}' }}</code>
+									<code>{{ '{{unsubscribe_link}}' }}</code>
+								</p>
+							</div>
+
+							<div class="col-md-4">
+								<h5>{{ 'Test & Preview'|trans }}</h5>
+
+								<div class="form-group">
+									<label>{{ 'Send Test Email'|trans }}</label>
+									<div class="input-group">
+										<input type="email" id="test-email" class="form-control" placeholder="test@example.com">
+										<span class="input-group-btn">
+											<button type="button" id="send-test-email-btn" class="btn btn-primary">
+												{{ 'Send'|trans }}
+											</button>
+										</span>
+									</div>
+									<p class="help-block">{{ 'Send a test email to verify content'|trans }}</p>
+								</div>
+
+								<div class="form-group">
+									<label>{{ 'Quick Preview'|trans }}</label>
+									<button type="button" id="preview-email-btn" class="btn btn-default btn-block">
+										{{ 'Preview Email'|trans }}
+									</button>
+								</div>
+
+								<div class="alert alert-info">
+									<p>{{ 'All emails will include an unsubscribe link automatically'|trans }}</p>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Multiple Emails Section -->
+					<div id="multiple-emails-section" style="display:none;">
+						<div class="alert alert-info">
+							<i class="ri-information-line"></i>
+							<strong>{{ 'Email Sequences'|trans }}</strong>:
+							{{ 'Create multiple emails that will be sent on different days.'|trans }}
+							<br>{{ 'Day 1 → Email 1, Day 2 → Email 2, etc.'|trans }}
+						</div>
+
+						<div class="form-group">
+							<button type="button" id="add-email-sequence-btn" class="btn btn-primary">
+								<i class="ri-add-line"></i>
+								{{ 'Add Email to Sequence'|trans }}
+							</button>
+						</div>
+
+						<div id="email-sequences-container"></div>
+
+						<div class="alert alert-warning" style="margin-top: 15px;">
+							<p>
+								<strong>{{ 'How it works:'|trans }}</strong>
+							</p>
+							<ul style="margin: 0;">
+								<li>{{ 'Emails are distributed based on your warmup plan calculation'|trans }}</li>
+								<li>{{ 'System sends the appropriate number of emails per day'|trans }}</li>
+								<li>{{ 'Emails are spread throughout the day (not sent all at once)'|trans }}</li>
+							</ul>
+						</div>
+					</div>
+				</div>
+
+				<!-- Step 5: Review & Create -->
+				<div class="step-content" style="display:none;" id="step-5">
+					<h4>{{ 'Review & Create'|trans }}</h4>
+					<hr>
+
+					<div class="row">
+						<div class="col-md-6">
+							<h5>{{ 'Campaign Summary'|trans }}</h5>
+							<table class="table table-striped">
+								<tr>
+									<td>{{ 'Campaign Name'|trans }}</td>
+									<td>
+										<strong id="summary-name">--</strong>
+									</td>
+								</tr>
+								<tr>
+									<td>{{ 'Domain'|trans }}</td>
+									<td>
+										<strong id="summary-domain">--</strong>
+									</td>
+								</tr>
+								<tr>
+									<td>{{ 'Start Date'|trans }}</td>
+									<td>
+										<strong id="summary-start-date">--</strong>
+									</td>
+								</tr>
+								<tr>
+									<td>{{ 'Contacts'|trans }}</td>
+									<td>
+										<strong id="summary-contacts">0</strong>
+									</td>
+								</tr>
+								<tr>
+									<td>{{ 'Warmup Type'|trans }}</td>
+									<td>
+										<strong id="summary-warmup-type">--</strong>
+									</td>
+								</tr>
+								<tr>
+									<td>{{ 'Duration'|trans }}</td>
+									<td>
+										<strong id="summary-duration">0 days</strong>
+									</td>
+								</tr>
+								<tr>
+									<td>{{ 'Daily Volume'|trans }}</td>
+									<td>
+										<strong id="summary-daily-volume">0 emails/day</strong>
+									</td>
+								</tr>
+								<tr>
+									<td>{{ 'Email Type'|trans }}</td>
+									<td>
+										<strong id="summary-email-type">Single Email</strong>
+									</td>
+								</tr>
+							</table>
+						</div>
+
+						<div class="col-md-6">
+							<h5>{{ 'Campaign Plan Summary'|trans }}</h5>
+							<div class="progress" style="height: 30px;">
+								<div id="summary-progress-bar" class="progress-bar progress-bar-success" role="progressbar" style="width: 0%"></div>
+							</div>
+							<div class="text-center" style="margin: 20px 0;">
+								<h2 id="summary-total-emails">0</h2>
+								<p class="text-muted">{{ 'total emails'|trans }}</p>
+							</div>
+							<div id="summary-details" class="alert alert-success">
+								<p>
+									<strong>{{ 'Ready to create campaign'|trans }}</strong>
+								</p>
+								<div id="summary-campaign-plan"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Form Actions -->
+			<div class="panel-footer">
+				<div class="row">
+					<div class="col-md-6">
+						<button type="button" id="prev-step-btn" class="btn btn-default" style="display: none;">
+							{{ 'Previous'|trans }}
+						</button>
+					</div>
+
+					<div class="col-md-6 text-right">
+						<button type="button" id="next-step-btn" class="btn btn-primary">
+							{{ 'Next'|trans }}
+						</button>
+
+						<div id="final-buttons" style="display: none;">
+							{% if isEdit %}
+								<!-- VÉRIFIEZ que ces boutons sont BIEN DANS le formulaire ! -->
+								<button type="submit" name="campaign_form[save]" class="btn btn-primary" id="save-btn">
+									{{ 'Update Campaign'|trans }}
+								</button>
+
+								<button type="submit" name="campaign_form[saveAndActivate]" class="btn btn-success ml-2" id="save-activate-btn">
+									{{ 'Update & Activate'|trans }}
+								</button>
+							{% else %}
+								<!-- CE SONT CES BOUTONS QUI MANQUENT OU SONT MAL PLACÉS -->
+								<button type="submit" name="campaign_form[save]" class="btn btn-primary" id="save-btn">
+									{{ 'Create Campaign'|trans }}
+								</button>
+
+								<button type="submit" name="campaign_form[saveAndActivate]" class="btn btn-success ml-2" id="save-activate-btn">
+									{{ 'Create & Activate'|trans }}
+								</button>
+							{% endif %}
+						</div>
+					</div>
+				</div>
+			</div>
+
+			{{ form_end(form, {'render_rest':true}) }}
+		</div>
+	</div>
+
+	<!-- Modals -->
+	<div class="modal fade" id="segments-modal" tabindex="-1">
+		<div class="modal-dialog modal-lg">
+			<div class="modal-content">
+				<div class="modal-header">
+					<button type="button" class="close" data-dismiss="modal">&times;</button>
+					<h4 class="modal-title">{{ 'Available Segments'|trans }}</h4>
+				</div>
+				<div class="modal-body">
+					<input type="text" id="segment-search" class="form-control" placeholder="{{ 'Search segments...'|trans }}" style="margin-bottom: 15px;">
+					<div id="segments-modal-content"></div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="modal fade" id="warmup-plan-modal" tabindex="-1">
+		<div class="modal-dialog modal-lg">
+			<div class="modal-content">
+				<div class="modal-header">
+					<button type="button" class="close" data-dismiss="modal">&times;</button>
+					<h4 class="modal-title">{{ 'Warmup Plan Preview'|trans }}</h4>
+				</div>
+				<div class="modal-body">
+					<div id="warmup-plan-content"></div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div id="email-preview-modal-container"></div>
+
+
+	 <script>
+				document.addEventListener('DOMContentLoaded', function() {
+				    // Vérifier que le token CSRF est présent
+				    const tokenInput = document.querySelector('[name="campaign_form[_token]"]');
+				    if (!tokenInput || !tokenInput.value) {
+				        console.error('❌ CSRF token not found!');
+				        // Regénérer le token si nécessaire
+				        fetch('{{ path("warmup_campaign_new") }}')
+				            .then(response => response.text())
+				            .then(html => {
+				                const parser = new DOMParser();
+				                const doc = parser.parseFromString(html, 'text/html');
+				                const newToken = doc.querySelector('[name="campaign_form[_token]"]');
+				                if (newToken && tokenInput) {
+				                    tokenInput.value = newToken.value;
+				                    console.log('✅ CSRF token regenerated');
+				                }
+				            });
+				    } else {
+				        console.log('✅ CSRF token found:', tokenInput.value.substring(0, 20) + '...');
+				    }
+				    
+				    // S'assurer que le formulaire a la bonne action
+				    const form = document.getElementById('campaign-form');
+				    if (form) {
+				        form.action = '{{ path("warmup_campaign_save") }}';
+				        form.method = 'POST';
+				        console.log('✅ Form action set to:', form.action);
+				    }
+				});
+				</script>
+
+	 <script src="{{ absolute_url(asset('plugins/MauticWarmUpBundle/Assets/js/campaign_form.js')) }}"></script>
+	 <script src="{{ absolute_url(asset('plugins/MauticWarmUpBundle/Assets/js/end_date_calculator.js')) }}"></script>
+
+		<style>
+.warmup-campaign-form {
+	max-width: 1200px;
+	margin: 0 auto;
 }
 
-.warmup-campaign-form .variable-tag {
-    display: inline-block;
-    margin: 2px 5px;
-    padding: 3px 8px;
-    background: #e8e8e8;
-    border-radius: 3px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: background 0.2s;
+.steps-container {
+	margin-bottom: 30px;
 }
 
-.warmup-campaign-form .variable-tag:hover {
-    background: #4CAF50;
-    color: white;
+.steps {
+	display: flex;
+	justify-content: space-between;
+	position: relative;
+	padding: 0;
+	margin: 0 0 40px;
 }
 
-.warmup-campaign-form .form-actions {
-    margin-top: 20px;
-    padding-top: 20px;
-    border-top: 1px solid #ddd;
+.steps::before {
+	content: '';
+	position: absolute;
+	top: 20px;
+	left: 0;
+	right: 0;
+	height: 2px;
+	background: #ddd;
+	z-index: 0;
 }
 
-.warmup-campaign-form .panel-heading {
-    background-color: #f5f5f5;
-    border-bottom: 1px solid #ddd;
+.step {
+	position: relative;
+	text-align: center;
+	flex: 1;
+	cursor: pointer;
 }
 
-.warmup-campaign-form .panel-title {
-    font-size: 16px;
-    font-weight: bold;
+.step-number {
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	background: #ddd;
+	color: #666;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0 auto 10px;
+	font-weight: bold;
+	position: relative;
+	z-index: 1;
+	transition: all 0.3s;
 }
-</style>
-{% endblock %}
+
+.step.active .step-number {
+	background: #4e5d9d;
+	color: white;
+	transform: scale(1.1);
+}
+
+.step.completed .step-number {
+	background: #5cb85c;
+	color: white;
+}
+
+.step-label {
+	font-size: 13px;
+	color: #666;
+}
+
+.step.active .step-label {
+	color: #4e5d9d;
+	font-weight: bold;
+}
+
+.contact-source-option {
+	cursor: pointer;
+	transition: all 0.2s;
+}
+
+.contact-source-option:hover {
+	background-color: #f5f5f5;
+}
+
+.contact-source-option.active {
+	background-color: #e7f4ff;
+	border-color: #4e5d9d;
+}
+
+.list-group-item-heading {
+	margin: 0 0 5px;
+	font-size: 15px;
+}
+
+.list-group-item-text {
+	margin: 0;
+	font-size: 12px;
+	color: #999;
+}
+
+.contacts-section {
+	animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.progress {
+	margin-bottom: 10px;
+}
+
+#contacts-counter {
+	margin-top: 20px;
+}
+
+.email-sequence-card {
+	margin-bottom: 15px;
+	animation: fadeIn 0.3s;
+}
+
+.email-sequence-card .panel-heading {
+	padding: 10px 15px;
+}
+
+.email-sequence-card .panel-body {
+	padding: 15px;
+}
+/* S'assurer que les boutons finaux sont visibles */
+#final-buttons {
+	display: inline-block !important;
+	opacity: 1 !important;
+	visibility: visible !important;
+}
+
+#final-buttons .btn {
+	margin-left: 5px;
+	display: inline-block !important;
+}
+
+/* Correction pour les étapes */
+.step-content {
+	display: none;
+	animation: fadeIn 0.3s;
+}
+
+.step-content.active {
+	display: block;
+}
+
+/* S'assurer que la section des boutons n'est pas cachée par d'autres styles */
+.panel-footer .text-right {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 10px;
+}
+
+/* Empêcher le masquage par d'autres styles */
+#save-btn,
+#save-activate-btn,
+[name="campaign_form[save]"],
+[name="campaign_form[saveAndActivate]"] {
+	display: inline-block !important;
+	visibility: visible !important;
+	opacity: 1 !important;
+}
+
+/* S'assurer que les boutons sont visibles */
+#final-buttons {
+	display: inline-block;
+}
+
+#final-buttons button {
+	margin-left: 5px;
+	min-width: 150px;
+}
+
+/* Style pour les boutons désactivés */
+#final-buttons button:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+/* Animation pour les boutons de chargement */
+.fa-spinner {
+	margin-right: 5px;
+}
+</style>{% endblock %}

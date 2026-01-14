@@ -29,6 +29,7 @@ class Domain
     private $createdAt;
     private $updatedAt;
     private $campaigns;
+    private $totalSent;
 
     public function __construct()
     {
@@ -37,6 +38,41 @@ class Domain
         $this->campaigns = new ArrayCollection();
     }
 
+    public function incrementTotalSentToday(int $count = 1): self
+    {
+        $this->totalSentToday += $count;
+        return $this;
+    }
+
+
+
+    public function setTotalSentToday(int $totalSentToday): self
+    {
+        $this->totalSentToday = $totalSentToday;
+        return $this;
+    }
+
+    public function incrementTotalSent(int $count = 1): self
+    {
+        $this->totalSent += $count;
+        return $this;
+    }
+
+
+
+    public function setTotalSent(int $totalSent): self
+    {
+        $this->totalSent = $totalSent;
+        return $this;
+    }
+    /**
+     * Incrémenter le compteur total
+     */
+    // public function incrementTotalSent(int $count = 1): self
+    // {
+    //     $this->totalSent += $count;
+    //     return $this;
+    // }
     public static function loadMetadata(ORM\ClassMetadata $metadata): void
     {
         $builder = new ClassMetadataBuilder($metadata);
@@ -69,6 +105,11 @@ class Domain
             ->build();
 
         $builder->createField('totalSentToday', 'integer')
+            ->columnName('total_sent_today')
+            ->option('default', 0)
+            ->build();
+        $builder->createField('totalSent', 'integer')
+            ->columnName('total_sent')
             ->option('default', 0)
             ->build();
 
@@ -192,11 +233,7 @@ class Domain
         return $this->totalSentToday;
     }
 
-    public function setTotalSentToday(int $totalSentToday): self
-    {
-        $this->totalSentToday = $totalSentToday;
-        return $this;
-    }
+
 
     public function incrementSentToday(): self
     {
@@ -604,6 +641,7 @@ class Domain
             'emailPrefix' => $this->emailPrefix,
             'dailyLimit' => $this->dailyLimit,
             'totalSentToday' => $this->totalSentToday,
+            'totalSent' => $this->totalSent,
             'remainingSendsToday' => $this->getRemainingSendsToday(),
             'isActive' => $this->isActive,
             'isVerified' => $this->isVerified,

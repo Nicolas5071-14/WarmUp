@@ -134,8 +134,11 @@ class EmailSenderService
                 $this->sendEmailToContact($campaign, $contact);
                 $this->updateContactAfterSend($contact);
 
-                $campaign->incrementEmailsSent();
-                $domain->incrementTotalSentToday();
+                $campaign->setEmailsSent($campaign->getEmailsSent() + 1);
+                $domain->setTotalSentToday($domain->getTotalSentToday() + 1);
+                $domain->setTotalSent($domain->getTotalSent() + 1);
+
+                // $domain->setTotalSent($domain->getTotalSent() + 1);
 
                 $sentCount++;
 
@@ -161,6 +164,7 @@ class EmailSenderService
 
         return $sentCount > 0;
     }
+
 
     /**
      * Envoyer un email à un contact
@@ -209,27 +213,108 @@ class EmailSenderService
     public function sendTestEmail(Domain $domain, string $toEmail, string $subject, string $message): array
     {
         try {
+            error_log("=== SENDING TEST EMAIL START ===");
+            error_log("Domain ID: " . $domain->getId());
+            error_log("Domain Name: " . $domain->getDomainName());
+            error_log("Domain Verified: " . ($domain->isVerified() ? 'Yes' : 'No'));
+            error_log("Domain Active: " . ($domain->isActive() ? 'Yes' : 'No'));
+            error_log("To Email: " . $toEmail);
+            error_log("Subject: " . $subject);
+            error_log("Message length: " . strlen($message));
+
+            // Vérifier l'adresse email
+            if (!filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+                throw new \Exception('Invalid email address: ' . $toEmail);
+            }
+
+            // Obtenir l'email d'envoi
+            $fromEmail = $this->getFromEmail($domain);
+            error_log("From Email: " . $fromEmail);
+
+            // Vérifier que l'email d'envoi est valide
+            if (!filter_var($fromEmail, FILTER_VALIDATE_EMAIL)) {
+                throw new \Exception('Invalid from email address: ' . $fromEmail);
+            }
+
+            error_log("Creating Email object...");
             $email = (new Email())
-                ->from($this->getFromEmail($domain))
+                ->from($fromEmail)
                 ->to($toEmail)
                 ->subject($subject)
                 ->text(strip_tags($message))
                 ->html(nl2br($message));
 
-            $this->mailer->send($email);
+            error_log("Attempting to send via mailer...");
 
-            return [
+            // Essayer d'envoyer avec plus de débogage
+            try {
+                $this->mailer->send($email);
+                error_log("✅ Email sent successfully via mailer!");
+            } catch (\Symfony\Component\Mailer\Exception\TransportExceptionInterface $e) {
+                error_log("❌ Transport Exception: " . $e->getMessage());
+                throw $e;
+            } catch (\Exception $e) {
+                error_log("❌ General Exception during send: " . $e->getMessage());
+                error_log("Exception class: " . get_class($e));
+                throw $e;
+            }
+
+            $result = [
                 'success' => true,
-                'from' => $this->getFromEmail($domain),
+                'from' => $fromEmail,
                 'to' => $toEmail,
                 'subject' => $subject,
                 'message_id' => uniqid('test_', true),
                 'sent_at' => (new \DateTime())->format('Y-m-d H:i:s')
             ];
 
+            error_log("Result: " . json_encode($result));
+            error_log("=== SENDING TEST EMAIL END ===");
+
+            return $result;
+
         } catch (\Exception $e) {
+            error_log("❌❌❌ FAILED to send test email: " . $e->getMessage());
+            error_log("Stack trace: " . $e->getTraceAsString());
+
+            // Ajouter plus d'informations sur la configuration
+            try {
+                // Vérifier la configuration mailer
+                $mailerDsn = $_ENV['MAILER_DSN'] ?? 'Not set';
+                error_log("MAILER_DSN: " . substr($mailerDsn, 0, 50) . "...");
+
+                // Vérifier la configuration SMTP dans app/config/local.php
+                if (file_exists('/var/www/html/app/config/local.php')) {
+                    $config = include '/var/www/html/app/config/local.php';
+                    if (isset($config['mailer'])) {
+                        error_log("Mailer config found in local.php");
+                    }
+                }
+            } catch (\Exception $configError) {
+                error_log("Error checking config: " . $configError->getMessage());
+            }
+
             throw new \Exception('Failed to send test email: ' . $e->getMessage());
         }
+    }
+
+    private function getFromEmail(Domain $domain): string
+    {
+        $prefix = $domain->getEmailPrefix() ?: 'noreply';
+        $domainName = $domain->getDomainName();
+
+        if (!$domainName) {
+            throw new \Exception('Domain name is empty for domain ID: ' . $domain->getId());
+        }
+
+        $fromEmail = $prefix . '@' . $domainName;
+
+        // Valider l'email
+        if (!filter_var($fromEmail, FILTER_VALIDATE_EMAIL)) {
+            throw new \Exception('Invalid from email generated: ' . $fromEmail . ' (prefix: ' . $prefix . ', domain: ' . $domainName . ')');
+        }
+
+        return $fromEmail;
     }
 
     /**
@@ -239,13 +324,8 @@ class EmailSenderService
     {
         $currentDay = $this->getCampaignDay($campaign);
 
-        // Essayer de récupérer le plan de warmup depuis customMessage
-        $warmupPlanJson = $campaign->getCustomMessage();
-        $warmupPlan = [];
-
-        if ($warmupPlanJson && $this->isJson($warmupPlanJson)) {
-            $warmupPlan = json_decode($warmupPlanJson, true);
-        }
+        // Utiliser le plan stocké dans warmupPlan
+        $warmupPlan = $campaign->getWarmupPlan();
 
         // Chercher le volume pour le jour actuel
         if (!empty($warmupPlan)) {
@@ -315,12 +395,18 @@ class EmailSenderService
     /**
      * Mettre à jour le contact après envoi
      */
+
+    public function incrementSentCount(int $count = 1): self
+    {
+        $this->sentCount += $count;
+        return $this;
+    }
     private function updateContactAfterSend(WarmupContact $contact): void
     {
         $now = new \DateTime('now', new \DateTimeZone($this->timezone));
 
         $contact->setLastSent($now);
-        $contact->incrementSentCount();
+        $contact->setSentCount($contact->getSentCount() + 1);
         $contact->setSequenceDay($contact->getSequenceDay() + 1);
 
         // Planifier le prochain envoi
@@ -373,6 +459,34 @@ class EmailSenderService
     }
 
     /**
+     * Send email to a contact (wrapper for sendTestEmail or custom implementation)
+     */
+    public function sendEmail(
+        $domain,
+        $toEmail,
+        $subject,
+        $message,
+        $campaignId = null,
+        $contactId = null
+    ): array {
+        try {
+            // Reuse sendTestEmail method or create specific logic
+            return $this->sendTestEmail($domain, $toEmail, $subject, $message);
+        } catch (\Exception $e) {
+            $this->logger->error('Error sending email', [
+                'campaign_id' => $campaignId,
+                'contact_id' => $contactId,
+                'to_email' => $toEmail,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+    /**
      * Générer le lien de désinscription
      */
     private function generateUnsubscribeLink(WarmupContact $contact): string
@@ -385,11 +499,11 @@ class EmailSenderService
     /**
      * Obtenir l'adresse email d'envoi
      */
-    private function getFromEmail(Domain $domain): string
-    {
-        $prefix = $domain->getEmailPrefix() ?: 'noreply';
-        return $prefix . '@' . $domain->getDomainName();
-    }
+    // private function getFromEmail(Domain $domain): string
+    // {
+    //     $prefix = $domain->getEmailPrefix() ?: 'noreply';
+    //     return $prefix . '@' . $domain->getDomainName();
+    // }
 
     /**
      * Vérifier s'il faut envoyer maintenant

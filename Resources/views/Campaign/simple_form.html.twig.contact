@@ -1,0 +1,783 @@
+{% extends '@MauticCore/Default/content.html.twig' %}
+
+{% block header %}
+	{{ parent() }}
+	<meta name="csrf-token" content="{{ csrf_token('authenticate') }}">
+{% endblock %}
+
+{% block headerTitle %}
+	{% if isEdit %}
+		{{ 'Edit Campaign'|trans }}
+	{% else %}
+		{{ 'New Campaign'|trans }}
+	{% endif %}
+{% endblock %}
+
+{% block mauticContent %}warmup_campaign
+{% endblock %}
+
+{% block content %}
+	<div class="warmup-campaign-form">
+		<input type="hidden" id="csrf-token" name="_token" value="{{ csrf_token('authenticate') }}">
+
+		<!-- Données des types de warmup pour JavaScript -->
+		 <script>
+								window.warmupFormulas = {{ warmupFormulas|json_encode|raw }};
+								
+								window.warmupCalculations = {
+									'arithmetic': {
+										name: 'Arithmetic (Linear)',
+										calculate: function(startVolume, dailyIncrement, day, totalDays) {
+											// I_n = a + (n-1) * d
+											return Math.round(startVolume + (day - 1) * dailyIncrement);
+										},
+										description: 'Increases by constant value each day'
+									},
+									'geometric': {
+										name: 'Geometric (Exponential)',
+										calculate: function(startVolume, dailyIncrement, day, totalDays) {
+											// I_n = a * r^(n-1) where r = 1 + (dailyIncrement/100)
+											const factor = 1 + (dailyIncrement / 100);
+											return Math.round(startVolume * Math.pow(factor, day - 1));
+										},
+										description: 'Multiplies by constant factor each day'
+									},
+									'progressive': {
+										name: 'Progressive (Standard)',
+										calculate: function(startVolume, dailyIncrement, day, totalDays) {
+											// Progressive increase that slows down towards the end
+											const progress = day / totalDays;
+											const adjustedIncrement = dailyIncrement * (1 - progress * 0.5);
+											return Math.round(startVolume + (day - 1) * adjustedIncrement);
+										},
+										description: 'Gradual increase to reach stable state'
+									},
+									'flat': {
+										name: 'Flat (Constant)',
+										calculate: function(startVolume, dailyIncrement, day, totalDays) {
+											return startVolume; // Always the same volume
+										},
+										description: 'Constant intensity throughout'
+									},
+									'randomize': {
+										name: 'Randomize',
+										calculate: function(startVolume, dailyIncrement, day, totalDays) {
+											// Random variation around linear value
+											const base = startVolume + (day - 1) * dailyIncrement;
+											const variation = Math.random() * 0.3 - 0.15; // ±15%
+											return Math.round(base * (1 + variation));
+										},
+										description: 'Random variation to stimulate nervous system'
+									}
+								};
+							</script>
+
+			<div class="panel panel-default"> <div class="panel-heading">
+				<h3 class="panel-title">
+					{% if isEdit %}
+						{{ 'Edit Campaign'|trans }}
+					{% else %}
+						{{ 'Create New Campaign'|trans }}
+					{% endif %}
+				</h3>
+			</div>
+
+			<form id="campaign-form" method="post" action="{{ path('warmup_campaign_save') }}" enctype="multipart/form-data">
+				<input type="hidden" name="campaign_form[id]" value="{{ campaign.id|default('') }}">
+				{{ form_row(form._token) }}
+
+				{# Hidden fields for default values #}
+				<input type="hidden" name="campaign_form[contactSource]" id="hidden_contact_source" value="manual">
+				<input type="hidden" name="campaign_form[sendFrequency]" id="hidden_send_frequency" value="daily">
+				<input type="hidden" name="campaign_form[enableWeekends]" id="hidden_enable_weekends" value="1">
+				<input type="hidden" name="campaign_form[enableRandomization]" id="hidden_enable_randomization" value="1">
+				<input type="hidden" id="campaign_form_totalContacts" name="campaign_form[totalContacts]" value="0">
+
+				<div
+					class="panel-body">
+					<!-- Progress Steps -->
+					<div class="steps-container">
+						<div class="steps">
+							<div class="step active" data-step="1">
+								<div class="step-number">1</div>
+								<div class="step-label">{{ 'Basics'|trans }}</div>
+							</div>
+							<div class="step" data-step="2">
+								<div class="step-number">2</div>
+								<div class="step-label">{{ 'Contacts'|trans }}</div>
+							</div>
+							<div class="step" data-step="3">
+								<div class="step-number">3</div>
+								<div class="step-label">{{ 'Warmup Setup'|trans }}</div>
+							</div>
+							<div class="step" data-step="4">
+								<div class="step-number">4</div>
+								<div class="step-label">{{ 'Content'|trans }}</div>
+							</div>
+							<div class="step" data-step="5">
+								<div class="step-number">5</div>
+								<div class="step-label">{{ 'Review'|trans }}</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Step 1: Basic Information -->
+					<div class="step-content" id="step-1">
+						<h4>{{ 'Basic Information'|trans }}</h4>
+						<hr>
+
+						<div class="row">
+							<div class="col-md-6">
+								<div class="form-group">
+									{{ form_label(form.campaignName, 'Campaign Name'|trans) }}
+									{{ form_widget(form.campaignName, {'attr': {'class': 'form-control', 'id': 'campaign_form_campaignName'}}) }}
+									{{ form_errors(form.campaignName) }}
+									<p class="help-block">{{ 'Give your campaign a descriptive name'|trans }}</p>
+								</div>
+							</div>
+
+							<div class="col-md-6">
+								<div class="form-group">
+									<label for="campaign_form_domain">{{ 'Domain'|trans }}</label>
+									<select name="campaign_form[domain]" id="campaign_form_domain" class="form-control" required>
+										<option value="">{{ 'Select a domain'|trans }}</option>
+										{% for domain in domains %}
+											<option value="{{ domain.id }}" {% if campaign.domain and campaign.domain.id == domain.id %} selected {% endif %}>
+												{{ domain.domainName }}
+												{% if domain.isVerified %}✓ Verified
+												{% endif %}
+											</option>
+										{% endfor %}
+									</select>
+									<p class="help-block">{{ 'Select the sending domain for this campaign'|trans }}</p>
+								</div>
+							</div>
+						</div>
+
+						<div class="row">
+							<div class="col-md-12">
+								<div class="form-group">
+									{{ form_label(form.description, 'Description'|trans) }}
+									{{ form_widget(form.description, {'attr': {'class': 'form-control', 'rows': 3, 'id': 'campaign_form_description'}}) }}
+									{{ form_errors(form.description) }}
+									<p class="help-block">{{ 'Optional description for your campaign'|trans }}</p>
+								</div>
+							</div>
+						</div>
+
+						<div class="row">
+							<div class="col-md-6">
+								<div class="form-group">
+									<label>{{ 'Schedule'|trans }}</label>
+									<div class="form-group">
+										<label>{{ 'Start Date'|trans }}</label>
+										<input type="datetime-local" name="campaign_form[startDate]" id="campaign_form_startDate" class="form-control" value="{{ campaign.startDate ? campaign.startDate.format('Y-m-d\\TH:i') : '' }}" required>
+									</div>
+
+									<div class="form-group">
+										<label>{{ 'Send Time'|trans }}</label>
+										<input type="time" name="campaign_form[sendTime]" id="campaign_form_sendTime" class="form-control" value="{{ campaign.sendTime ? campaign.sendTime.format('H:i') : '09:00' }}">
+										<p class="help-block">{{ 'Toronto Time (EST/EDT)'|trans }}</p>
+									</div>
+								</div>
+							</div>
+
+							<div class="col-md-6">
+								<div class="form-group">
+									<label>{{ 'Sending Options'|trans }}</label>
+									<div class="checkbox">
+										<label>
+											<input type="checkbox" name="campaign_form[enableWeekends]" id="campaign_form_enableWeekends" value="1" {% if campaign.enableWeekends %} checked {% endif %}>
+											{{ 'Enable Weekends'|trans }}
+										</label>
+									</div>
+									<div class="checkbox">
+										<label>
+											<input type="checkbox" name="campaign_form[enableRandomization]" id="campaign_form_enableRandomization" value="1" {% if campaign.enableRandomization %} checked {% endif %}>
+											{{ 'Randomize'|trans }}
+										</label>
+									</div>
+
+									<div class="form-group" style="margin-top: 15px;">
+										<label>{{ 'Send Frequency'|trans }}</label>
+										<select name="campaign_form[sendFrequency]" id="campaign_form_sendFrequency" class="form-control">
+											<option value="daily" {% if campaign.sendFrequency == 'daily' %} selected {% endif %}>{{ 'Daily'|trans }}</option>
+											<option value="weekly" {% if campaign.sendFrequency == 'weekly' %} selected {% endif %}>{{ 'Weekly'|trans }}</option>
+											<option value="monthly" {% if campaign.sendFrequency == 'monthly' %} selected {% endif %}>{{ 'Monthly'|trans }}</option>
+										</select>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Step 2: Contacts -->
+					<div class="step-content" style="display:none;" id="step-2">
+						<h4>{{ 'Contacts'|trans }}</h4>
+						<hr>
+
+						<div class="row">
+							<div class="col-md-4">
+								<h5>{{ 'Source Type'|trans }}</h5>
+
+								<div class="list-group">
+									<a href="#" class="list-group-item contact-source-option active" data-source="manual">
+										<h5 class="list-group-item-heading">{{ 'Manual Input'|trans }}</h5>
+										<p class="list-group-item-text">{{ 'Enter emails manually'|trans }}</p>
+									</a>
+
+									<a href="#" class="list-group-item contact-source-option" data-source="mautic">
+										<h5 class="list-group-item-heading">{{ 'Mautic Segment'|trans }}</h5>
+										<p class="list-group-item-text">{{ 'Import from existing segment'|trans }}</p>
+									</a>
+
+									<a href="#" class="list-group-item contact-source-option" data-source="csv">
+										<h5 class="list-group-item-heading">{{ 'CSV Import'|trans }}</h5>
+										<p class="list-group-item-text">{{ 'Upload CSV file'|trans }}</p>
+									</a>
+								</div>
+							</div>
+
+							<div
+								class="col-md-8">
+								<!-- Manual Contacts -->
+								<div id="manual-contacts-section" class="contacts-section">
+									<h5>{{ 'Manual Email Entry'|trans }}</h5>
+									<div class="form-group">
+										<textarea name="campaign_form[manualContacts]" id="campaign_form_manualContacts" class="form-control" rows="10" placeholder="email1@example.com&#10;email2@example.com&#10;email3@example.com"></textarea>
+										<p class="help-block">{{ 'Enter one email per line'|trans }}</p>
+									</div>
+								</div>
+
+								<!-- Mautic Segment -->
+								<div id="mautic-segment-section" class="contacts-section" style="display:none;">
+									<h5>{{ 'Select Mautic Segment'|trans }}</h5>
+									<div class="form-group">
+										<div class="input-group">
+											<input type="number" name="campaign_form[segmentId]" id="campaign_form_segmentId" class="form-control" placeholder="Segment ID">
+											<span class="input-group-btn">
+												<button type="button" id="browse-segments-btn" class="btn btn-default">
+													{{ 'Browse'|trans }}
+												</button>
+											</span>
+										</div>
+										<p class="help-block">{{ 'Enter segment ID or browse available segments'|trans }}</p>
+									</div>
+
+									<div id="segment-preview" style="display:none;"><!-- Segment preview will be loaded here --></div>
+								</div>
+
+								<!-- CSV Import Section -->
+								<div id="csv-import-section" class="contacts-section" style="display:none;">
+									<h5>{{ 'Upload CSV File'|trans }}</h5>
+									<div class="form-group">
+										<input type="file" name="campaign_form[csvFile]" id="campaign_form_csvFile" class="form-control" accept=".csv">
+										<p class="help-block">
+											{{ 'CSV format: email,first_name,last_name (header required)'|trans }}<br>
+											{{ 'Max file size: 1MB'|trans }}
+										</p>
+									</div>
+
+									<!-- CSV Upload Progress -->
+									<div id="csv-upload-progress" class="progress" style="display: none;">
+										<div class="progress-bar progress-bar-striped active" style="width: 100%">Processing CSV...</div>
+									</div>
+
+									<!-- CSV Preview -->
+									<div id="csv-preview" style="display:none;">
+										<div class="alert alert-success">
+											<strong>CSV Preview</strong>
+											<button type="button" class="close" onclick="window.clearCsvPreview()">&times;</button>
+										</div>
+										<div class="table-responsive">
+											<table class="table table-striped table-condensed" id="csv-preview-table">
+												<thead>
+													<tr>
+														<th>Email</th>
+														<th>First Name</th>
+														<th>Last Name</th>
+													</tr>
+												</thead>
+												<tbody id="csv-preview-body"></tbody>
+											</table>
+										</div>
+										<div class="text-center">
+											<p id="csv-total-contacts">0 contacts found</p>
+											<button type="button" class="btn btn-success btn-sm" onclick="window.confirmCsvImport()">
+												{{ 'Confirm Import'|trans }}
+											</button>
+										</div>
+									</div>
+								</div>
+
+								<!-- Contacts Counter -->
+								<div id="contacts-counter" class="alert alert-info" style="display:none;">
+									<strong>
+										<span id="contacts-count">0</span>
+										{{ 'contacts ready'|trans }}</strong>
+									<p>{{ 'These contacts will be imported into the campaign'|trans }}</p>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Step 3: Warmup Setup -->
+					<div class="step-content" style="display:none;" id="step-3">
+						<h4>{{ 'Warmup Setup'|trans }}</h4>
+						<hr>
+
+						<div class="row">
+							<div class="col-md-6">
+								<h5>{{ 'Warmup Configuration'|trans }}</h5>
+
+								<div class="form-group">
+									<label for="campaign_form_warmupType">{{ 'Warmup Type'|trans }}</label>
+									<select name="campaign_form[warmupType]" id="campaign_form_warmupType" class="form-control" required>
+										<option value="">{{ 'Select warmup type'|trans }}</option>
+										{% for type in warmupTypes %}
+											<option value="{{ type.id }}" data-formula-type="{{ type.formulaType|default('arithmetic') }}" data-default-start="{{ type.defaultStartVolume|default(20) }}" data-default-duration="{{ type.defaultDurationDays|default(30) }}" data-default-increment="{{ type.defaultIncrementPercentage|default(10) }}" {% if campaign.warmupType and campaign.warmupType.id == type.id %} selected {% endif %}>
+												{{ type.typeName }}
+											</option>
+										{% endfor %}
+									</select>
+									<p class="help-block">{{ 'Choose how to increase email volume over time'|trans }}</p>
+								</div>
+
+								<div class="row">
+									<div class="col-md-6">
+										<div class="form-group">
+											<label>{{ 'Start Volume'|trans }}</label>
+											<div class="input-group">
+												<input type="number" name="campaign_form[startVolume]" id="campaign_form_startVolume" class="form-control" value="{{ campaign.startVolume|default(20) }}" min="1" max="1000">
+												<span class="input-group-addon">emails/day</span>
+											</div>
+											<p class="help-block">{{ 'Minimum emails to send per day'|trans }}</p>
+										</div>
+									</div>
+
+									<div class="col-md-6">
+										<div class="form-group">
+											<label>{{ 'Duration'|trans }}</label>
+											<div class="input-group">
+												<input type="number" name="campaign_form[durationDays]" id="campaign_form_durationDays" class="form-control" value="{{ campaign.durationDays|default(30) }}" min="1" max="90">
+												<span class="input-group-addon">days</span>
+											</div>
+											<p class="help-block">{{ 'Total campaign duration'|trans }}</p>
+										</div>
+									</div>
+								</div>
+
+								<div class="form-group">
+									<label>{{ 'Daily Increment'|trans }}</label>
+									<div class="input-group">
+										<input type="number" name="campaign_form[dailyIncrement]" id="campaign_form_dailyIncrement" class="form-control" value="{{ campaign.dailyIncrement|default(10) }}" min="0" max="100">
+										<span class="input-group-addon">%</span>
+									</div>
+									<p class="help-block">{{ 'Daily percentage increase in email volume'|trans }}</p>
+								</div>
+
+								<div class="form-group">
+									<button type="button" id="preview-warmup-btn" class="btn btn-info btn-block">
+										<i class="ri-eye-line ri-fw"></i>
+										{{ 'Preview Warmup Plan'|trans }}
+									</button>
+								</div>
+							</div>
+
+							<div class="col-md-6">
+								<h5>{{ 'Campaign Statistics'|trans }}</h5>
+
+								<div class="well" style="margin-top: 10px; padding: 15px;">
+									<div class="progress" style="height: 20px;">
+										<div id="warmup-progress-bar" class="progress-bar progress-bar-success progress-bar-striped" role="progressbar" style="width: 0%"></div>
+									</div>
+									<p class="text-center" style="margin-top: 10px;">
+										<span id="total-emails" style="font-size: 18px; font-weight: bold; color: #5cb85c;">0</span>
+										{{ 'emails over'|trans }}
+										<span id="total-days" style="font-weight: bold;">0</span>
+										{{ 'days'|trans }}
+									</p>
+									<div id="campaign-plan-summary" style="display: none; margin-top: 10px;">
+										<div id="campaign-plan-content" class="text-small"></div>
+									</div>
+								</div>
+
+								<!-- Campaign Plan Details -->
+								<div id="campaign-plan-details" class="alert alert-info" style="display: none; margin-top: 15px;">
+									<h5 style="margin-top: 0;">Campaign Plan Details</h5>
+									<div
+										id="campaign-details-content"><!-- Content will be populated by JavaScript -->
+									</div>
+								</div>
+
+								<div class="alert alert-warning">
+									<p>
+										<strong>Note:</strong>
+										Each contact will receive only 1 email. The system will calculate the daily volume automatically based on total contacts and duration.
+									</p>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Step 4: Email Content -->
+					<div class="step-content" style="display:none;" id="step-4">
+						<h4>{{ 'Email Content'|trans }}</h4>
+						<hr>
+
+						<div class="row">
+							<div class="col-md-8">
+								<div class="form-group">
+									<label>{{ 'Select Template'|trans }}</label>
+									<select name="campaign_form[template]" id="campaign_form_template" class="form-control">
+										<option value="">{{ 'Select a template'|trans }}</option>
+										{% for template in templates %}
+											<option value="{{ template.id }}" {% if campaign.template and campaign.template.id == template.id %} selected {% endif %}>
+												{{ template.name }}
+											</option>
+										{% endfor %}
+									</select>
+									<p class="help-block">{{ 'Choose a pre-made template or create custom content'|trans }}</p>
+								</div>
+
+								<div class="form-group">
+									<label>{{ 'Subject'|trans }}</label>
+									<input type="text" name="campaign_form[subjectTemplate]" id="campaign_form_subjectTemplate" class="form-control" placeholder="Enter email subject" value="{{ campaign.subjectTemplate|default('') }}" required>
+								</div>
+
+								<div class="form-group">
+									<label>{{ 'Email Body'|trans }}</label>
+									<textarea name="campaign_form[customMessage]" id="campaign_form_customMessage" class="form-control" rows="12" placeholder="Enter your email content here..." required>{{ campaign.customMessage|default('') }}</textarea>
+									<p class="help-block">
+										<strong>{{ 'Available variables:'|trans }}</strong>
+										<code>{{ '{{first_name}}' }}</code>
+										<code>{{ '{{last_name}}' }}</code>
+										<code>{{ '{{email}}' }}</code>
+										<code>{{ '{{campaign_name}}' }}</code>
+										<code>{{ '{{unsubscribe_link}}' }}</code>
+									</p>
+								</div>
+							</div>
+
+							<div class="col-md-4">
+								<h5>{{ 'Test & Preview'|trans }}</h5>
+
+								<div class="form-group">
+									<label>{{ 'Send Test Email'|trans }}</label>
+									<div class="input-group">
+										<input type="email" id="test-email" class="form-control" placeholder="test@example.com">
+										<span class="input-group-btn">
+											<button type="button" id="send-test-email-btn" class="btn btn-primary">
+												Send
+											</button>
+										</span>
+									</div>
+									<p class="help-block">{{ 'Send a test email to verify content'|trans }}</p>
+								</div>
+
+								<div class="form-group">
+									<label>{{ 'Quick Preview'|trans }}</label>
+									<button type="button" id="preview-email-btn" class="btn btn-default btn-block">
+										{{ 'Preview Email'|trans }}
+									</button>
+								</div>
+
+								<div class="alert alert-info">
+									<p>{{ 'All emails will include an unsubscribe link automatically'|trans }}</p>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Step 5: Review & Create -->
+					<div class="step-content" style="display:none;" id="step-5">
+						<h4>{{ 'Review & Create'|trans }}</h4>
+						<hr>
+
+						<div class="row">
+							<div class="col-md-6">
+								<h5>{{ 'Campaign Summary'|trans }}</h5>
+								<table class="table table-striped">
+									<tr>
+										<td>{{ 'Campaign Name'|trans }}</td>
+										<td>
+											<strong id="summary-name">--</strong>
+										</td>
+									</tr>
+									<tr>
+										<td>{{ 'Domain'|trans }}</td>
+										<td>
+											<strong id="summary-domain">--</strong>
+										</td>
+									</tr>
+									<tr>
+										<td>{{ 'Start Date'|trans }}</td>
+										<td>
+											<strong id="summary-start-date">--</strong>
+										</td>
+									</tr>
+									<tr>
+										<td>{{ 'Contacts'|trans }}</td>
+										<td>
+											<strong id="summary-contacts">0</strong>
+										</td>
+									</tr>
+									<tr>
+										<td>{{ 'Warmup Type'|trans }}</td>
+										<td>
+											<strong id="summary-warmup-type">--</strong>
+										</td>
+									</tr>
+									<tr>
+										<td>{{ 'Duration'|trans }}</td>
+										<td>
+											<strong id="summary-duration">0 days</strong>
+										</td>
+									</tr>
+									<tr>
+										<td>{{ 'Daily Volume'|trans }}</td>
+										<td>
+											<strong id="summary-daily-volume">0 emails/day</strong>
+										</td>
+									</tr>
+								</table>
+							</div>
+
+							<div class="col-md-6">
+								<h5>{{ 'Campaign Plan Summary'|trans }}</h5>
+								<div class="progress" style="height: 30px;">
+									<div id="summary-progress-bar" class="progress-bar progress-bar-success" role="progressbar" style="width: 0%"></div>
+								</div>
+								<div class="text-center" style="margin: 20px 0;">
+									<h2 id="summary-total-emails">0</h2>
+									<p class="text-muted">{{ 'total emails'|trans }}</p>
+								</div>
+								<div id="summary-details" class="alert alert-success">
+									<p>
+										<strong>{{ 'Ready to create campaign'|trans }}</strong>
+									</p>
+									<div id="summary-campaign-plan"></div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Form Actions -->
+				<div class="panel-footer">
+					<div class="row">
+						<div class="col-md-6">
+							<button type="button" id="prev-step-btn" class="btn btn-default" style="display: none;">
+								{{ 'Previous'|trans }}
+							</button>
+						</div>
+
+						<div class="col-md-6 text-right">
+							<button type="button" id="next-step-btn" class="btn btn-primary">
+								{{ 'Next'|trans }}
+							</button>
+
+							<button type="submit" name="campaign_form[save]" class="btn btn-success" style="display:none;" id="save-btn">
+								{% if isEdit %}
+									{{ 'Update Campaign'|trans }}
+								{% else %}
+									{{ 'Create Campaign'|trans }}
+								{% endif %}
+							</button>
+
+							<button type="submit" name="campaign_form[saveAndActivate]" class="btn btn-success" style="display:none;" id="save-activate-btn">
+								{% if isEdit %}
+									{{ 'Update & Activate'|trans }}
+								{% else %}
+									{{ 'Create & Activate'|trans }}
+								{% endif %}
+							</button>
+						</div>
+					</div>
+				</div>
+				{{ form_end(form, {'render_rest': false}) }}
+			</form>
+		</div>
+	</div>
+
+	<!-- Segments Modal -->
+	<div class="modal fade" id="segments-modal" tabindex="-1">
+		<div class="modal-dialog modal-lg">
+			<div class="modal-content">
+				<div class="modal-header">
+					<button type="button" class="close" data-dismiss="modal">&times;</button>
+					<h4 class="modal-title">{{ 'Available Segments'|trans }}</h4>
+				</div>
+				<div class="modal-body">
+					<input type="text" id="segment-search" class="form-control" placeholder="{{ 'Search segments...'|trans }}" style="margin-bottom: 15px;">
+					<div id="segments-modal-content"></div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Warmup Plan Modal -->
+	<div class="modal fade" id="warmup-plan-modal" tabindex="-1">
+		<div class="modal-dialog modal-lg">
+			<div class="modal-content">
+				<div class="modal-header">
+					<button type="button" class="close" data-dismiss="modal">&times;</button>
+					<h4 class="modal-title">{{ 'Warmup Plan Preview'|trans }}</h4>
+				</div>
+				<div class="modal-body">
+					<div id="warmup-plan-content"></div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Email Preview Modal -->
+	<div id="email-preview-modal-container"></div>
+
+	 <script src="{{ absolute_url(asset('plugins/MauticWarmUpBundle/Assets/js/campaign_form.js')) }}"></script>
+
+	<style>
+		.warmup-campaign-form {
+			max-width: 1200px;
+			margin: 0 auto;
+		}
+
+		.steps-container {
+			margin-bottom: 30px;
+		}
+
+		.steps {
+			display: flex;
+			justify-content: space-between;
+			position: relative;
+			padding: 0;
+			margin: 0 0 40px;
+		}
+
+		.steps::before {
+			content: '';
+			position: absolute;
+			top: 20px;
+			left: 0;
+			right: 0;
+			height: 2px;
+			background: #ddd;
+			z-index: 0;
+		}
+
+		.step {
+			position: relative;
+			text-align: center;
+			flex: 1;
+			cursor: pointer;
+		}
+
+		.step-number {
+			width: 40px;
+			height: 40px;
+			border-radius: 50%;
+			background: #ddd;
+			color: #666;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			margin: 0 auto 10px;
+			font-weight: bold;
+			position: relative;
+			z-index: 1;
+			transition: all 0.3s;
+		}
+
+		.step.active .step-number {
+			background: #4e5d9d;
+			color: white;
+			transform: scale(1.1);
+		}
+
+		.step.completed .step-number {
+			background: #5cb85c;
+			color: white;
+		}
+
+		.step-label {
+			font-size: 13px;
+			color: #666;
+		}
+
+		.step.active .step-label {
+			color: #4e5d9d;
+			font-weight: bold;
+		}
+
+		.contact-source-option {
+			cursor: pointer;
+			transition: all 0.2s;
+		}
+
+		.contact-source-option:hover {
+			background-color: #f5f5f5;
+		}
+
+		.contact-source-option.active {
+			background-color: #e7f4ff;
+			border-color: #4e5d9d;
+		}
+
+		.list-group-item-heading {
+			margin: 0 0 5px;
+			font-size: 15px;
+		}
+
+		.list-group-item-text {
+			margin: 0;
+			font-size: 12px;
+			color: #999;
+		}
+
+		.contacts-section {
+			animation: fadeIn 0.3s;
+		}
+
+		@keyframes fadeIn {
+			from {
+				opacity: 0;
+				transform: translateY(10px);
+			}
+			to {
+				opacity: 1;
+				transform: translateY(0);
+			}
+		}
+
+		.progress {
+			margin-bottom: 10px;
+		}
+
+		#contacts-counter {
+			margin-top: 20px;
+		}
+
+		.warmup-campaign-form .badge {
+			font-size: 12px;
+			padding: 3px 8px;
+		}
+
+		.warmup-campaign-form .progress-bar {
+			transition: width 0.5s ease;
+		}
+
+		.text-small {
+			font-size: 12px;
+		}
+
+		#campaign-plan-details table {
+			font-size: 12px;
+			margin-bottom: 0;
+		}
+
+		#campaign-plan-details table td {
+			padding: 3px 8px;
+			border: none;
+		}
+	</style>
+{% endblock %}

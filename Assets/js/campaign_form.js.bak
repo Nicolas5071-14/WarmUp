@@ -1,0 +1,1469 @@
+// Campaign Form JavaScript - Complete corrected version
+(function () {
+    console.log('Campaign form initialized');
+
+    // Configuration
+    const config = {
+        currentStep: 1,
+        totalSteps: 5,
+        contactSource: 'manual',
+        contactsCount: 0,
+        segmentCache: null,
+        dailyVolumes: [],
+        totalEmails: 0,
+        csvContacts: null,
+        currentSegmentId: null
+    };
+
+    // ==========================================
+    // UTILITY FUNCTIONS
+    // ==========================================
+
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func(...args), wait);
+        };
+    }
+
+    function showNotification(message, type = 'info') {
+        const alertClass = {
+            'success': 'alert-success',
+            'error': 'alert-danger',
+            'warning': 'alert-warning',
+            'info': 'alert-info'
+        }[type] || 'alert-info';
+
+        const notification = document.createElement('div');
+        notification.className = `alert ${alertClass} alert-dismissible`;
+        notification.style.cssText = 'position: fixed; top: 70px; right: 20px; z-index: 9999; min-width: 300px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);';
+        notification.innerHTML = `
+            <button type="button" class="close" data-dismiss="alert">&times;</button>
+            <strong>${type === 'success' ? 'Success!' : type === 'error' ? 'Error!' : 'Info:'}</strong> ${message}
+        `;
+
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 5000);
+    }
+
+    // ==========================================
+    // CAMPAIGN PLAN CALCULATIONS
+    // ==========================================
+
+    /**
+ * Calculate daily sending volumes based on warmup type formula
+ */
+    function calculateWarmupVolumes(startVolume, dailyIncrement, durationDays, formulaType, totalContacts = null, alpha = 0.1) {
+        const dailyVolumes = [];
+        let previous = startVolume;
+
+        for (let day = 1; day <= durationDays; day++) {
+            let dailyVolume;
+
+            switch (formulaType) {
+
+                case 'arithmetic':
+                    // I_n = a + (n-1) d
+                    dailyVolume = startVolume + ((day - 1) * dailyIncrement);
+                    break;
+
+                case 'geometric':
+                    // I_n = a * r^(n-1)
+                    const r = 1 + (dailyIncrement / 100);
+                    dailyVolume = startVolume * Math.pow(r, day - 1);
+                    break;
+
+                case 'progressive':
+                    // E_n = E_{n-1} + α (E_target − E_{n-1})
+                    const target = totalContacts ? Math.ceil(totalContacts / durationDays) : startVolume + dailyIncrement * durationDays;
+                    dailyVolume = previous + alpha * (target - previous);
+                    previous = dailyVolume;
+                    break;
+
+                case 'flat':
+                    // I(t) = k
+                    dailyVolume = startVolume;
+                    break;
+
+                case 'randomize':
+                    // I_n ~ U(min,max) autour de la courbe progressive
+                    const base = startVolume + ((day - 1) * dailyIncrement);
+                    const min = base * 0.85;
+                    const max = base * 1.15;
+                    dailyVolume = min + Math.random() * (max - min);
+                    break;
+
+                default:
+                    dailyVolume = startVolume + ((day - 1) * dailyIncrement);
+            }
+
+            dailyVolume = Math.max(1, Math.round(dailyVolume));
+            dailyVolumes.push(dailyVolume);
+        }
+
+        if (totalContacts && totalContacts > 0) {
+            const totalCalculated = dailyVolumes.reduce((a, b) => a + b, 0);
+            if (totalCalculated > totalContacts) {
+                const factor = totalContacts / totalCalculated;
+                for (let i = 0; i < dailyVolumes.length; i++) {
+                    dailyVolumes[i] = Math.max(1, Math.round(dailyVolumes[i] * factor));
+                }
+            }
+        }
+
+        return dailyVolumes;
+    }
+
+    /**
+     * Calculate campaign plan based on total contacts and duration
+     */
+    function calculateCampaignPlan() {
+        // Récupérer les valeurs des inputs (sans valeurs par défaut si vides)
+        const totalContacts = parseInt(config.contactsCount) || 0;
+        const ALPHA_OPTIMAL = 0.1; // norme Gmail / Outlook
+
+
+        // Utiliser directement les valeurs des inputs sans valeurs par défaut
+        const durationDaysInput = document.getElementById('campaign_form_durationDays');
+        const durationDays = durationDaysInput && durationDaysInput.value !== '' ?
+            parseInt(durationDaysInput.value) : null;
+
+        const startVolumeInput = document.getElementById('campaign_form_startVolume');
+        const startVolume = startVolumeInput && startVolumeInput.value !== '' ?
+            parseInt(startVolumeInput.value) : null;
+
+        const dailyIncrementInput = document.getElementById('campaign_form_dailyIncrement');
+        const dailyIncrement = dailyIncrementInput && dailyIncrementInput.value !== '' ?
+            parseInt(dailyIncrementInput.value) : null;
+
+        const warmupTypeSelect = document.getElementById('campaign_form_warmupType');
+        const selectedOption = warmupTypeSelect?.options[warmupTypeSelect.selectedIndex];
+        const formulaType = selectedOption?.getAttribute('data-formula-type') || 'arithmetic';
+
+        console.log('Calculating campaign plan with inputs:', {
+            totalContacts,
+            durationDays,
+            startVolume,
+            dailyIncrement,
+            formulaType
+        });
+
+        // Validation des inputs requis
+        if (!startVolume || !durationDays || !dailyIncrement) {
+            console.log('Missing required inputs for calculation');
+            hideCampaignPlanDisplay();
+            updateWarmupDisplay(0, durationDays || 0);
+            return null;
+        }
+
+        if (totalContacts > 0 && durationDays > 0) {
+            // Calculer le volume quotidien idéal
+            const idealDailyVolume = Math.ceil(totalContacts / durationDays);
+
+            // Calculer les volumes quotidiens selon le type de warmup
+            const dailyVolumes = calculateWarmupVolumes(
+                startVolume,
+                dailyIncrement,
+                durationDays,
+                formulaType,
+                totalContacts,
+                ALPHA_OPTIMAL
+            );
+
+            // Ajuster si nécessaire pour ne pas dépasser le volume quotidien idéal
+            let warmupTotalEmails = 0;
+            const adjustedVolumes = [];
+
+            for (let i = 0; i < dailyVolumes.length; i++) {
+                let volume = dailyVolumes[i];
+
+                // Limiter au volume quotidien idéal si nécessaire
+                if (idealDailyVolume > 0 && volume > idealDailyVolume) {
+                    volume = idealDailyVolume;
+                }
+
+                // Assurer un minimum de 1
+                volume = Math.max(1, Math.round(volume));
+                adjustedVolumes.push(volume);
+                warmupTotalEmails += volume;
+            }
+
+            // Ajustement final si on dépasse le total des contacts
+            if (warmupTotalEmails > totalContacts) {
+                const adjustmentFactor = totalContacts / warmupTotalEmails;
+                for (let i = 0; i < adjustedVolumes.length; i++) {
+                    adjustedVolumes[i] = Math.max(1, Math.round(adjustedVolumes[i] * adjustmentFactor));
+                }
+                warmupTotalEmails = totalContacts;
+            }
+
+            // Stocker pour réutilisation
+            config.dailyVolumes = adjustedVolumes;
+            config.totalEmails = warmupTotalEmails;
+
+            // Mettre à jour les affichages
+            updateCampaignPlanDisplay(totalContacts, durationDays, idealDailyVolume, formulaType, adjustedVolumes);
+            updateWarmupDisplay(warmupTotalEmails, durationDays);
+
+            // Mettre à jour le champ caché
+            const totalContactsField = document.getElementById('campaign_form_totalContacts');
+            if (totalContactsField) {
+                totalContactsField.value = totalContacts;
+            }
+
+            return {
+                totalContacts,
+                durationDays,
+                idealDailyVolume,
+                startVolume,
+                dailyIncrement,
+                formulaType,
+                dailyVolumes: adjustedVolumes,
+                warmupTotalEmails
+            };
+        } else {
+            hideCampaignPlanDisplay();
+            updateWarmupDisplay(0, durationDays || 0);
+            return null;
+        }
+    }
+
+    function getWarmupFormulaDescription(formulaType, startVolume, dailyIncrement, alpha = 0.1) {
+        const formulas = {
+            'arithmetic': `Iₙ = ${startVolume} + (n−1) × ${dailyIncrement}`,
+            'geometric': `Iₙ = ${startVolume} × ${(1 + dailyIncrement / 100).toFixed(2)}^(n−1)`,
+            'progressive': `Eₙ = Eₙ₋₁ + α(E_target − Eₙ₋₁),  α = ${alpha}`,
+            'flat': `I(t) = ${startVolume}`,
+            'randomize': `Iₙ ~ U(0.85·I_base , 1.15·I_base)`
+        };
+
+        return formulas[formulaType] || formulas.arithmetic;
+    }
+    /**
+     * Update campaign plan display
+     */
+    /**
+     * Mettre à jour l'affichage du plan de campagne avec la formule
+     */
+    function updateCampaignPlanDisplay(totalContacts, durationDays, idealDailyVolume, formulaType, dailyVolumes) {
+        const summaryElement = document.getElementById('campaign-plan-summary');
+        const contentElement = document.getElementById('campaign-plan-content');
+        const detailsElement = document.getElementById('campaign-plan-details');
+        const detailsContent = document.getElementById('campaign-details-content');
+
+        // Récupérer les valeurs pour la formule
+        const startVolume = parseInt(document.getElementById('campaign_form_startVolume')?.value) || 0;
+        const dailyIncrement = parseInt(document.getElementById('campaign_form_dailyIncrement')?.value) || 0;
+
+        const averageDailyVolume = Math.round(dailyVolumes.reduce((a, b) => a + b, 0) / durationDays);
+        const formulaDescription = getWarmupFormulaDescription(formulaType, startVolume, dailyIncrement);
+
+        // Résumé dans l'étape 3
+        if (summaryElement && contentElement) {
+            contentElement.innerHTML = `
+            <strong>${totalContacts.toLocaleString()}</strong> contacts over <strong>${durationDays}</strong> days
+            <br><small>≈ ${averageDailyVolume.toLocaleString()} emails/day average</small>
+            <br><small><i>Formula: ${formulaDescription}</i></small>
+        `;
+            summaryElement.style.display = 'block';
+        }
+
+        // Détails dans l'étape 3
+        if (detailsElement && detailsContent) {
+            const firstWeekTotal = dailyVolumes.slice(0, 7).reduce((a, b) => a + b, 0);
+            const peakVolume = Math.max(...dailyVolumes);
+
+            detailsContent.innerHTML = `
+            <table class="table table-condensed">
+                <tr>
+                    <td>Total Contacts:</td>
+                    <td><strong>${totalContacts.toLocaleString()}</strong></td>
+                </tr>
+                <tr>
+                    <td>Campaign Duration:</td>
+                    <td><strong>${durationDays} days</strong></td>
+                </tr>
+                <tr>
+                    <td>Daily Average:</td>
+                    <td><strong>${averageDailyVolume.toLocaleString()} emails/day</strong></td>
+                </tr>
+                <tr>
+                    <td>Peak Daily Volume:</td>
+                    <td><strong>${peakVolume.toLocaleString()} emails/day</strong></td>
+                </tr>
+                <tr>
+                    <td>First Week Total:</td>
+                    <td><strong>${firstWeekTotal.toLocaleString()} emails</strong></td>
+                </tr>
+                <tr>
+                    <td>Warmup Formula:</td>
+                    <td><strong>${formulaDescription}</strong></td>
+                </tr>
+            </table>
+            <p style="margin-bottom: 0; font-size: 11px;">
+                <i class="ri-information-line"></i> 
+                System calculates: <strong>${totalContacts} ÷ ${durationDays} = ${idealDailyVolume} emails/day (ideal)</strong>
+            </p>
+        `;
+            detailsElement.style.display = 'block';
+        }
+
+        updateSummaryCampaignPlan(totalContacts, durationDays, averageDailyVolume, formulaType);
+    }
+    /**
+     * Hide campaign plan display
+     */
+    function hideCampaignPlanDisplay() {
+        const summaryElement = document.getElementById('campaign-plan-summary');
+        const detailsElement = document.getElementById('campaign-plan-details');
+
+        if (summaryElement) summaryElement.style.display = 'none';
+        if (detailsElement) detailsElement.style.display = 'none';
+    }
+
+    /**
+     * Update summary in step 5
+     */
+    function updateSummaryCampaignPlan(totalContacts, durationDays, averageDailyVolume) {
+        const summaryDailyVolume = document.getElementById('summary-daily-volume');
+        const summaryCampaignPlan = document.getElementById('summary-campaign-plan');
+        const summaryWarmupType = document.getElementById('summary-warmup-type');
+        const warmupTypeSelect = document.getElementById('campaign_form_warmupType');
+        const selectedOption = warmupTypeSelect?.options[warmupTypeSelect.selectedIndex];
+        const warmupTypeName = selectedOption?.text || '--';
+
+        if (summaryDailyVolume) {
+            summaryDailyVolume.textContent = `${averageDailyVolume.toLocaleString()} emails/day`;
+        }
+
+        if (summaryWarmupType) {
+            summaryWarmupType.textContent = warmupTypeName;
+        }
+
+        if (summaryCampaignPlan) {
+            summaryCampaignPlan.innerHTML = `
+                <p>${totalContacts.toLocaleString()} contacts will receive 1 email each over ${durationDays} days.</p>
+                <p>Average sending volume: <strong>${averageDailyVolume.toLocaleString()} emails/day</strong></p>
+                <p>Review all settings before creating the campaign.</p>
+            `;
+        }
+    }
+
+    // ==========================================
+    // INITIALIZE
+    // ==========================================
+
+    function initialize() {
+        console.log('Initializing campaign form...');
+
+        // Set default date
+        const startDateInput = document.getElementById('campaign_form_startDate');
+        if (startDateInput && !startDateInput.value) {
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setHours(9, 0, 0, 0);
+            startDateInput.value = tomorrow.toISOString().slice(0, 16);
+        }
+
+        // Attach event listeners
+        setupSteps();
+        setupContactSection();
+        setupEmailContent();
+        setupWarmupCalculator();
+        setupFormValidation();
+
+        // Initial calculation (will be empty until contacts added)
+        calculateCampaignPlan();
+    }
+
+    // ==========================================
+    // STEP NAVIGATION
+    // ==========================================
+
+    function setupSteps() {
+        const steps = document.querySelectorAll('.step');
+        const stepContents = document.querySelectorAll('.step-content');
+        const prevBtn = document.getElementById('prev-step-btn');
+        const nextBtn = document.getElementById('next-step-btn');
+        const saveBtn = document.getElementById('save-btn');
+        const saveActivateBtn = document.getElementById('save-activate-btn');
+
+        // Step click handlers
+        steps.forEach(step => {
+            step.addEventListener('click', function () {
+                const stepNum = parseInt(this.dataset.step);
+                if (stepNum < config.currentStep) {
+                    updateStep(stepNum);
+                }
+            });
+        });
+
+        // Previous button
+        if (prevBtn) {
+            prevBtn.addEventListener('click', () => updateStep(config.currentStep - 1));
+        }
+
+        // Next button
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => {
+                if (validateStep(config.currentStep)) {
+                    updateStep(config.currentStep + 1);
+                }
+            });
+        }
+
+        // Update step function
+        function updateStep(step) {
+            if (step < 1 || step > config.totalSteps) return;
+
+            config.currentStep = step;
+
+            // Update step indicators
+            steps.forEach(s => {
+                const stepNum = parseInt(s.dataset.step);
+                s.classList.toggle('active', stepNum === config.currentStep);
+                s.classList.toggle('completed', stepNum < config.currentStep);
+            });
+
+            // Update content visibility
+            stepContents.forEach((content, index) => {
+                content.style.display = (index + 1) === config.currentStep ? 'block' : 'none';
+            });
+
+            // Update navigation buttons
+            if (prevBtn) {
+                prevBtn.style.display = config.currentStep > 1 ? 'inline-block' : 'none';
+            }
+
+            if (config.currentStep === config.totalSteps) {
+                if (nextBtn) nextBtn.style.display = 'none';
+                if (saveBtn) saveBtn.style.display = 'inline-block';
+                if (saveActivateBtn) saveActivateBtn.style.display = 'inline-block';
+                updateSummary();
+            } else {
+                if (nextBtn) nextBtn.style.display = 'inline-block';
+                if (saveBtn) saveBtn.style.display = 'none';
+                if (saveActivateBtn) saveActivateBtn.style.display = 'none';
+            }
+        }
+
+        // Initialize with step 1
+        updateStep(1);
+    }
+
+    // ==========================================
+    // VALIDATE STEP
+    // ==========================================
+
+    function validateStep(step) {
+        let isValid = true;
+        let message = '';
+
+        switch (step) {
+            case 1:
+                const campaignName = document.getElementById('campaign_form_campaignName') ||
+                    document.querySelector('input[name="campaign_form[campaignName]"]') ||
+                    document.querySelector('input[name*="campaignName"]');
+
+                const domain = document.getElementById('campaign_form_domain') ||
+                    document.querySelector('select[name="campaign_form[domain]"]') ||
+                    document.querySelector('select[name*="domain"]');
+
+                if (!campaignName || !campaignName.value.trim()) {
+                    isValid = false;
+                    message = 'Please enter a campaign name';
+                    if (campaignName) campaignName.focus();
+                } else if (!domain || !domain.value) {
+                    isValid = false;
+                    message = 'Please select a sending domain';
+                    if (domain) domain.focus();
+                }
+                break;
+
+            case 2:
+                // Step 2 is contacts - validate that we have at least one contact
+                if (config.contactsCount === 0) {
+                    isValid = false;
+                    message = 'Please add at least one contact';
+                }
+                break;
+
+            case 3:
+                // Step 3 is warmup setup - validate warmup type
+                const warmupType = document.getElementById('campaign_form_warmupType') ||
+                    document.querySelector('select[name="campaign_form[warmupType]"]') ||
+                    document.querySelector('select[name*="warmupType"]');
+
+                if (!warmupType || !warmupType.value) {
+                    isValid = false;
+                    message = 'Please select a warmup type';
+                    if (warmupType) warmupType.focus();
+                }
+                break;
+
+            case 4:
+                const subject = document.getElementById('campaign_form_subjectTemplate') ||
+                    document.querySelector('input[name="campaign_form[subjectTemplate]"]') ||
+                    document.querySelector('input[name*="subjectTemplate"]');
+
+                const content = document.getElementById('campaign_form_customMessage') ||
+                    document.querySelector('textarea[name="campaign_form[customMessage]"]') ||
+                    document.querySelector('textarea[name*="customMessage"]');
+
+                if (!subject || !subject.value.trim()) {
+                    isValid = false;
+                    message = 'Please enter an email subject';
+                    if (subject) subject.focus();
+                } else if (!content || !content.value.trim()) {
+                    isValid = false;
+                    message = 'Please enter email content';
+                    if (content) content.focus();
+                }
+                break;
+        }
+
+        if (!isValid && message) {
+            showNotification(message, 'error');
+        }
+
+        return isValid;
+    }
+
+    // ==========================================
+    // CONTACT SECTION
+    // ==========================================
+
+    function setupContactSection() {
+        const contactSourceOptions = document.querySelectorAll('.contact-source-option');
+        const manualTextarea = document.getElementById('campaign_form_manualContacts');
+        const csvFileInput = document.getElementById('campaign_form_csvFile');
+        const browseSegmentsBtn = document.getElementById('browse-segments-btn');
+
+        // Contact source selection
+        contactSourceOptions.forEach(option => {
+            option.addEventListener('click', function (e) {
+                e.preventDefault();
+
+                contactSourceOptions.forEach(opt => opt.classList.remove('active'));
+                this.classList.add('active');
+
+                const source = this.dataset.source;
+                config.contactSource = source;
+
+                // Hide all contact sections
+                document.querySelectorAll('.contacts-section').forEach(section => {
+                    section.style.display = 'none';
+                });
+
+                // Show appropriate section
+                if (source === 'manual') {
+                    const section = document.getElementById('manual-contacts-section');
+                    if (section) section.style.display = 'block';
+                } else if (source === 'mautic') {
+                    const section = document.getElementById('mautic-segment-section');
+                    if (section) section.style.display = 'block';
+                } else if (source === 'csv') {
+                    const section = document.getElementById('csv-import-section');
+                    if (section) section.style.display = 'block';
+                }
+
+                // Update hidden field
+                const hiddenContactSource = document.getElementById('hidden_contact_source');
+                if (hiddenContactSource) {
+                    hiddenContactSource.value = source;
+                }
+
+                resetContactsCounter();
+            });
+        });
+
+        // Initialize first section
+        const activeOption = document.querySelector('.contact-source-option.active');
+        if (activeOption) {
+            const source = activeOption.dataset.source;
+            if (source === 'manual') {
+                const section = document.getElementById('manual-contacts-section');
+                if (section) section.style.display = 'block';
+            } else if (source === 'mautic') {
+                const section = document.getElementById('mautic-segment-section');
+                if (section) section.style.display = 'block';
+            } else if (source === 'csv') {
+                const section = document.getElementById('csv-import-section');
+                if (section) section.style.display = 'block';
+            }
+        }
+
+        // Manual contacts
+        if (manualTextarea) {
+            manualTextarea.addEventListener('input', debounce(() => {
+                const emails = manualTextarea.value.split('\n')
+                    .map(email => email.trim())
+                    .filter(email => email && email.includes('@'));
+                updateContactsCounter(emails.length);
+            }, 500));
+        }
+
+        // CSV file
+        if (csvFileInput) {
+            csvFileInput.addEventListener('change', handleCsvFile);
+        }
+
+        // Segments
+        if (browseSegmentsBtn) {
+            browseSegmentsBtn.addEventListener('click', showSegmentsModal);
+        }
+
+        // Expose functions globally for onclick handlers
+        window.previewCsvFile = previewCsvFile;
+        window.clearCsvPreview = clearCsvPreview;
+        window.confirmCsvImport = confirmCsvImport;
+        window.clearSegmentPreview = clearSegmentPreview;
+        window.confirmSegmentImport = confirmSegmentImport;
+    }
+
+    // Handle CSV file
+    async function handleCsvFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        if (!file.name.toLowerCase().endsWith('.csv')) {
+            showNotification('Please select a CSV file', 'error');
+            event.target.value = '';
+            return;
+        }
+
+        if (file.size > 1024 * 1024) {
+            showNotification('File size must be less than 1MB', 'error');
+            event.target.value = '';
+            return;
+        }
+
+        previewCsvFile(event.target);
+    }
+
+    // Preview CSV file
+    async function previewCsvFile(input) {
+        if (!input.files || !input.files[0]) return;
+
+        const file = input.files[0];
+        const formData = new FormData();
+        formData.append('csvFile', file);
+
+        const progressDiv = document.getElementById('csv-upload-progress');
+        const previewDiv = document.getElementById('csv-preview');
+
+        if (progressDiv) progressDiv.style.display = 'block';
+        if (previewDiv) previewDiv.style.display = 'none';
+
+        try {
+            const response = await fetch('/s/warmup/campaigns/preview-csv', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                const previewBody = document.getElementById('csv-preview-body');
+                const totalContacts = document.getElementById('csv-total-contacts');
+
+                if (previewBody && totalContacts) {
+                    previewBody.innerHTML = '';
+
+                    if (data.preview && data.preview.length > 0) {
+                        data.preview.forEach(row => {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td>${row[0] || ''}</td>
+                                <td>${row[1] || ''}</td>
+                                <td>${row[2] || ''}</td>
+                            `;
+                            previewBody.appendChild(tr);
+                        });
+                    } else {
+                        // Fallback: try to parse the file directly
+                        const text = await readFileAsText(file);
+                        const lines = text.split('\n').filter(line => line.trim());
+
+                        if (lines.length > 1) {
+                            // Skip header
+                            for (let i = 1; i < Math.min(11, lines.length); i++) {
+                                const row = lines[i].split(',').map(cell => cell.trim());
+                                const tr = document.createElement('tr');
+                                tr.innerHTML = `
+                                    <td>${row[0] || ''}</td>
+                                    <td>${row[1] || ''}</td>
+                                    <td>${row[2] || ''}</td>
+                                `;
+                                previewBody.appendChild(tr);
+                            }
+                        }
+
+                        data.total_contacts = Math.max(0, lines.length - 1);
+                    }
+
+                    totalContacts.textContent = `${data.total_contacts} contacts found`;
+
+                    // Update contacts counter
+                    updateContactsCounter(data.total_contacts);
+                    config.csvContacts = data.total_contacts;
+
+                    // Show preview
+                    if (progressDiv) progressDiv.style.display = 'none';
+                    if (previewDiv) previewDiv.style.display = 'block';
+
+                    showNotification(`CSV file processed. Found ${data.total_contacts} contacts.`, 'success');
+                }
+            } else {
+                throw new Error(data.message || 'Failed to process CSV');
+            }
+        } catch (error) {
+            console.error('Error processing CSV:', error);
+            showNotification('Error: ' + error.message, 'error');
+            if (progressDiv) progressDiv.style.display = 'none';
+        }
+    }
+
+    function readFileAsText(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = (e) => reject(new Error('Failed to read file'));
+            reader.readAsText(file);
+        });
+    }
+
+    // Clear CSV preview
+    function clearCsvPreview() {
+        document.getElementById('campaign_form_csvFile').value = '';
+        document.getElementById('csv-preview').style.display = 'none';
+        document.getElementById('csv-preview-body').innerHTML = '';
+        document.getElementById('csv-total-contacts').textContent = '0 contacts found';
+        config.csvContacts = null;
+        updateContactsCounter(0);
+    }
+
+    // Confirm CSV import
+    function confirmCsvImport() {
+        if (config.csvContacts && config.csvContacts > 0) {
+            showNotification(`Successfully imported ${config.csvContacts} contacts from CSV`, 'success');
+        } else {
+            showNotification('No contacts to import', 'warning');
+        }
+    }
+
+    // Load segment contacts preview
+    async function loadSegmentContactsPreview(segmentId) {
+        try {
+            const response = await fetch('/s/warmup/campaigns/preview-segment', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: `segment_id=${segmentId}&limit=10`
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                const segmentPreview = document.getElementById('segment-preview');
+                if (segmentPreview) {
+                    let html = `
+                    <div class="alert alert-success">
+                        <strong>Segment Preview</strong>
+                        <button type="button" class="close" onclick="window.clearSegmentPreview()">&times;</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-condensed">
+                            <thead>
+                                <tr>
+                                    <th>Email</th>
+                                    <th>First Name</th>
+                                    <th>Last Name</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                    data.contacts.forEach(contact => {
+                        html += `
+                        <tr>
+                            <td>${contact.email || '-'}</td>
+                            <td>${contact.first_name || '-'}</td>
+                            <td>${contact.last_name || '-'}</td>
+                        </tr>
+                    `;
+                    });
+
+                    html += `
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="text-center">
+                        <p><strong>${data.total_contacts} contacts</strong> in this segment</p>
+                        <button type="button" class="btn btn-success btn-sm" onclick="window.confirmSegmentImport(${segmentId})">
+                            Import All Contacts
+                        </button>
+                    </div>
+                `;
+
+                    segmentPreview.innerHTML = html;
+                    segmentPreview.style.display = 'block';
+
+                    // Update contacts counter
+                    updateContactsCounter(data.total_contacts);
+                    config.currentSegmentId = segmentId;
+                }
+            } else {
+                throw new Error(data.message || 'Failed to load segment preview');
+            }
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    }
+
+    // Confirm segment import
+    function confirmSegmentImport(segmentId) {
+        showNotification(`Segment import confirmed. ${config.contactsCount} contacts will be added.`, 'success');
+    }
+
+    // Clear segment preview
+    function clearSegmentPreview() {
+        document.getElementById('segment-preview').innerHTML = '';
+        document.getElementById('segment-preview').style.display = 'none';
+        document.getElementById('campaign_form_segmentId').value = '';
+        updateContactsCounter(0);
+        config.currentSegmentId = null;
+    }
+
+    // Show segments modal
+    async function showSegmentsModal() {
+        try {
+            const modalContent = document.getElementById('segments-modal-content');
+            if (modalContent) {
+                modalContent.innerHTML = '<div class="text-center"><p>Loading segments...</p></div>';
+            }
+
+            const response = await fetch('/s/warmup/campaigns/list-segments', {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            if (modalContent) {
+                if (data.success && data.segments && data.segments.length > 0) {
+                    let html = '<div class="list-group">';
+
+                    data.segments.forEach(segment => {
+                        html += `
+                            <a href="#" class="list-group-item select-segment" 
+                               data-id="${segment.id}" 
+                               data-name="${segment.name}">
+                                <h5 class="list-group-item-heading">${segment.name}</h5>
+                                <p class="list-group-item-text">
+                                    ${segment.description || 'No description'}
+                                    <br>
+                                    <small>${segment.lead_count || 0} contacts</small>
+                                </p>
+                            </a>
+                        `;
+                    });
+
+                    html += '</div>';
+                    modalContent.innerHTML = html;
+
+                    document.querySelectorAll('.select-segment').forEach(btn => {
+                        btn.addEventListener('click', function (e) {
+                            e.preventDefault();
+                            const segmentId = this.dataset.id;
+                            const segmentName = this.dataset.name;
+
+                            const segmentIdInput = document.getElementById('campaign_form_segmentId');
+                            if (segmentIdInput) {
+                                segmentIdInput.value = segmentId;
+                            }
+
+                            const segmentPreview = document.getElementById('segment-preview');
+                            if (segmentPreview) {
+                                segmentPreview.innerHTML = `
+                                    <div class="alert alert-success">
+                                        Selected segment: <strong>${segmentName}</strong>
+                                    </div>
+                                `;
+                                segmentPreview.style.display = 'block';
+                            }
+
+                            loadSegmentContacts(segmentId);
+
+                            // Close modal (jQuery Bootstrap 3)
+                            if (typeof jQuery !== 'undefined') {
+                                jQuery('#segments-modal').modal('hide');
+                            }
+                        });
+                    });
+                } else {
+                    modalContent.innerHTML = '<div class="alert alert-warning">No segments found. Please create segments in Mautic first.</div>';
+                }
+            }
+
+            // Show modal (jQuery Bootstrap 3)
+            if (typeof jQuery !== 'undefined') {
+                jQuery('#segments-modal').modal('show');
+            }
+
+        } catch (error) {
+            console.error('Error loading segments:', error);
+            showNotification('Failed to load segments: ' + error.message, 'error');
+        }
+    }
+
+    // Load segment contacts
+    async function loadSegmentContacts(segmentId) {
+        try {
+            const formData = new URLSearchParams();
+            formData.append('segment_id', segmentId);
+            formData.append('limit', '5');
+
+            const response = await fetch('/s/warmup/campaigns/preview-contacts', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                const contactsCount = data.total_available || 0;
+                updateContactsCounter(contactsCount);
+                showNotification(`Loaded ${contactsCount} contacts from segment`, 'success');
+            } else {
+                throw new Error(data.message || 'Failed to load segment contacts');
+            }
+        } catch (error) {
+            console.error('Error loading segment contacts:', error);
+            showNotification(error.message, 'error');
+        }
+    }
+
+    // Update contacts counter
+    function updateContactsCounter(count) {
+        config.contactsCount = count;
+
+        const contactsCountSpan = document.getElementById('contacts-count');
+        const contactsCounter = document.getElementById('contacts-counter');
+        const summaryContacts = document.getElementById('summary-contacts');
+
+        if (contactsCountSpan) contactsCountSpan.textContent = count.toLocaleString();
+        if (summaryContacts) summaryContacts.textContent = count.toLocaleString();
+
+        if (contactsCounter) {
+            contactsCounter.style.display = count > 0 ? 'block' : 'none';
+        }
+
+        // Recalculate campaign plan
+        calculateCampaignPlan();
+    }
+
+    // Reset contacts counter
+    function resetContactsCounter() {
+        updateContactsCounter(0);
+    }
+
+    // ==========================================
+    // EMAIL CONTENT
+    // ==========================================
+
+    function setupEmailContent() {
+        const sendTestEmailBtn = document.getElementById('send-test-email-btn');
+        const previewEmailBtn = document.getElementById('preview-email-btn');
+
+        if (sendTestEmailBtn) {
+            sendTestEmailBtn.addEventListener('click', sendTestEmail);
+        }
+
+        if (previewEmailBtn) {
+            previewEmailBtn.addEventListener('click', previewEmail);
+        }
+    }
+
+    // Send test email
+    async function sendTestEmail() {
+        const testEmailInput = document.getElementById('test-email');
+        const subjectInput = document.getElementById('campaign_form_subjectTemplate');
+        const messageTextarea = document.getElementById('campaign_form_customMessage');
+        const domainSelect = document.getElementById('campaign_form_domain');
+
+        // Validation
+        if (!testEmailInput || !testEmailInput.value) {
+            showNotification('Please enter a test email address', 'warning');
+            if (testEmailInput) testEmailInput.focus();
+            return;
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(testEmailInput.value)) {
+            showNotification('Please enter a valid email address', 'warning');
+            testEmailInput.focus();
+            return;
+        }
+
+        if (!domainSelect || !domainSelect.value) {
+            showNotification('Please select a domain first', 'warning');
+            return;
+        }
+
+        const btn = this;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = 'Sending...';
+        btn.disabled = true;
+
+        // Get token
+        const token = document.getElementById('csrf-token')?.value || '';
+
+        // Prepare data
+        const bodyParams = new URLSearchParams();
+        bodyParams.append('testEmail', testEmailInput.value);
+        bodyParams.append('domainId', domainSelect.value);
+        bodyParams.append('subject', subjectInput?.value || 'Test Email');
+        bodyParams.append('message', messageTextarea?.value || 'This is a test email');
+        bodyParams.append('_token', token);
+
+        try {
+            const response = await fetch('/s/warmup/campaigns/send-test-email', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: bodyParams.toString()
+            });
+
+            const responseText = await response.text();
+            console.log('Response:', responseText.substring(0, 500));
+
+            let data;
+            try {
+                data = JSON.parse(responseText);
+            } catch (jsonError) {
+                console.error('Failed to parse JSON:', jsonError);
+                throw new Error('Server returned invalid response');
+            }
+
+            if (data.success) {
+                showNotification('Test email sent successfully!', 'success');
+                testEmailInput.value = '';
+            } else {
+                throw new Error(data.message || 'Failed to send test email');
+            }
+
+        } catch (error) {
+            console.error('Error sending test email:', error);
+            showNotification('Error: ' + error.message, 'error');
+        } finally {
+            btn.innerHTML = 'Send';
+            btn.disabled = false;
+        }
+    }
+
+    // Preview email
+    function previewEmail() {
+        const subjectInput = document.getElementById('campaign_form_subjectTemplate');
+        const messageTextarea = document.getElementById('campaign_form_customMessage');
+
+        const subject = subjectInput?.value || 'No subject';
+        const content = messageTextarea?.value || 'No content';
+
+        const existingModal = document.getElementById('email-preview-modal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        const modal = `
+            <div class="modal fade" id="email-preview-modal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <button type="button" class="close" data-dismiss="modal">&times;</button>
+                            <h4 class="modal-title">Email Preview</h4>
+                        </div>
+                        <div class="modal-body">
+                            <h5>Subject: ${subject}</h5>
+                            <hr>
+                            <div style="border: 1px solid #ddd; padding: 15px; background: white;">
+                                ${content.replace(/\n/g, '<br>')}
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const container = document.getElementById('email-preview-modal-container');
+        if (container) {
+            container.innerHTML = modal;
+
+            if (typeof jQuery !== 'undefined') {
+                jQuery('#email-preview-modal').modal('show');
+                jQuery('#email-preview-modal').on('hidden.bs.modal', function () {
+                    container.innerHTML = '';
+                });
+            }
+        }
+    }
+
+    // ==========================================
+    // WARMUP CALCULATOR
+    // ==========================================
+
+    function setupWarmupCalculator() {
+        const startVolumeInput = document.getElementById('campaign_form_startVolume');
+        const durationDaysInput = document.getElementById('campaign_form_durationDays');
+        const dailyIncrementInput = document.getElementById('campaign_form_dailyIncrement');
+        const warmupTypeSelect = document.getElementById('campaign_form_warmupType');
+        const previewWarmupBtn = document.getElementById('preview-warmup-btn');
+
+        // Event listeners
+        [startVolumeInput, durationDaysInput, dailyIncrementInput, warmupTypeSelect].forEach(input => {
+            if (input) {
+                input.addEventListener('input', debounce(() => {
+                    calculateCampaignPlan();
+                }, 300));
+                input.addEventListener('change', () => {
+                    calculateCampaignPlan();
+                });
+            }
+        });
+
+        // When warmup type changes, adjust default values
+        if (warmupTypeSelect) {
+            warmupTypeSelect.addEventListener('change', function () {
+                const selectedOption = this.options[this.selectedIndex];
+                if (selectedOption) {
+                    const defaultStart = selectedOption.getAttribute('data-default-start');
+                    const defaultDuration = selectedOption.getAttribute('data-default-duration');
+                    const defaultIncrement = selectedOption.getAttribute('data-default-increment');
+
+                    // Update values only if they haven't been modified by user
+                    if (startVolumeInput && !startVolumeInput.dataset.modified && defaultStart) {
+                        startVolumeInput.value = defaultStart;
+                    }
+
+                    if (durationDaysInput && !durationDaysInput.dataset.modified && defaultDuration) {
+                        durationDaysInput.value = defaultDuration;
+                    }
+
+                    if (dailyIncrementInput && !dailyIncrementInput.dataset.modified && defaultIncrement) {
+                        dailyIncrementInput.value = defaultIncrement;
+                    }
+
+                    calculateCampaignPlan();
+                }
+            });
+        }
+
+        // Mark fields as modified when user changes them
+        [startVolumeInput, dailyIncrementInput, durationDaysInput].forEach(input => {
+            if (input) {
+                input.addEventListener('input', function () {
+                    this.dataset.modified = 'true';
+                });
+            }
+        });
+
+        if (previewWarmupBtn) {
+            previewWarmupBtn.addEventListener('click', showWarmupPlanPreview);
+        }
+
+        // Initial calculation
+        calculateCampaignPlan();
+    }
+
+    // Update warmup display
+    function updateWarmupDisplay(totalEmails, durationDays) {
+        const totalEmailsSpan = document.getElementById('total-emails');
+        const totalDaysSpan = document.getElementById('total-days');
+        const progressBar = document.getElementById('warmup-progress-bar');
+        const summaryTotalEmails = document.getElementById('summary-total-emails');
+        const summaryProgressBar = document.getElementById('summary-progress-bar');
+        const summaryDuration = document.getElementById('summary-duration');
+
+        if (totalEmailsSpan) {
+            totalEmailsSpan.textContent = totalEmails.toLocaleString();
+            totalEmailsSpan.style.fontWeight = 'bold';
+            totalEmailsSpan.style.color = totalEmails > 0 ? '#5cb85c' : '#d9534f';
+        }
+
+        if (totalDaysSpan) {
+            totalDaysSpan.textContent = durationDays;
+        }
+
+        if (progressBar) {
+            const maxEmails = Math.max(totalEmails, 1000); // Minimum to avoid division by 0
+            const percentage = Math.min(100, (totalEmails / maxEmails) * 100);
+            progressBar.style.width = percentage + '%';
+            progressBar.textContent = totalEmails.toLocaleString() + ' emails';
+            progressBar.className = 'progress-bar progress-bar-success progress-bar-striped';
+        }
+
+        // Update summary too
+        if (summaryTotalEmails) {
+            summaryTotalEmails.textContent = totalEmails.toLocaleString();
+        }
+
+        if (summaryProgressBar) {
+            const maxEmails = Math.max(totalEmails, 1000);
+            const percentage = Math.min(100, (totalEmails / maxEmails) * 100);
+            summaryProgressBar.style.width = percentage + '%';
+        }
+
+        if (summaryDuration) {
+            summaryDuration.textContent = durationDays + ' days';
+        }
+    }
+
+    // Show warmup plan preview
+    function showWarmupPlanPreview() {
+        const totalContacts = config.contactsCount || 0;
+        const durationDays = parseInt(document.getElementById('campaign_form_durationDays')?.value) || 30;
+        const startVolume = parseInt(document.getElementById('campaign_form_startVolume')?.value) || 20;
+        const warmupTypeSelect = document.getElementById('campaign_form_warmupType');
+        const selectedTypeId = warmupTypeSelect?.value;
+
+        if (totalContacts === 0) {
+            showNotification('Please add contacts first to see the warmup plan', 'warning');
+            return;
+        }
+
+        let warmupTypeName = 'Warmup Plan';
+        let warmupTypeDescription = 'Daily email sending plan';
+
+        if (selectedTypeId && window.warmupFormulas && window.warmupFormulas[selectedTypeId]) {
+            warmupTypeName = window.warmupFormulas[selectedTypeId].name;
+            warmupTypeDescription = window.warmupFormulas[selectedTypeId].description;
+        }
+
+        // Recalculate if necessary
+        const plan = calculateCampaignPlan();
+        if (!plan) return;
+
+        let html = `
+            <div class="alert alert-success">
+                <h4>Campaign Warmup Plan</h4>
+                <p><strong>Objective:</strong> Send 1 email to each of ${totalContacts.toLocaleString()} contacts over ${durationDays} days</p>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            <h5 class="panel-title">Summary</h5>
+                        </div>
+                        <div class="panel-body">
+                            <table class="table table-condensed">
+                                <tr>
+                                    <td>Total Contacts:</td>
+                                    <td><strong>${totalContacts.toLocaleString()}</strong></td>
+                                </tr>
+                                <tr>
+                                    <td>Campaign Duration:</td>
+                                    <td><strong>${durationDays} days</strong></td>
+                                </tr>
+                                <tr>
+                                    <td>Warmup Type:</td>
+                                    <td><strong>${warmupTypeName}</strong></td>
+                                </tr>
+                                <tr>
+                                    <td>Start Volume:</td>
+                                    <td><strong>${startVolume} emails/day</strong></td>
+                                </tr>
+                                <tr>
+                                    <td>Daily Average:</td>
+                                    <td><strong>${Math.round(plan.dailyVolumes.reduce((a, b) => a + b, 0) / durationDays).toLocaleString()} emails/day</strong></td>
+                                </tr>
+                                <tr>
+                                    <td>Total Emails:</td>
+                                    <td><strong>${plan.warmupTotalEmails.toLocaleString()} emails</strong></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            <h5 class="panel-title">Daily Schedule (First 2 Weeks)</h5>
+                        </div>
+                        <div class="panel-body">
+                            <div class="table-responsive">
+                                <table class="table table-striped table-condensed">
+                                    <thead>
+                                        <tr>
+                                            <th>Day</th>
+                                            <th>Emails</th>
+                                            <th>Cumulative</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+        `;
+
+        // Show first 14 days
+        let cumulative = 0;
+        const displayLimit = Math.min(14, plan.dailyVolumes.length);
+
+        for (let day = 1; day <= displayLimit; day++) {
+            const dailyVolume = plan.dailyVolumes[day - 1] || 0;
+            cumulative += dailyVolume;
+
+            html += `
+                <tr>
+                    <td>Day ${day}</td>
+                    <td><span class="badge badge-primary">${dailyVolume}</span></td>
+                    <td>${cumulative.toLocaleString()}</td>
+                </tr>
+            `;
+        }
+
+        if (plan.dailyVolumes.length > 14) {
+            const remainingDays = plan.dailyVolumes.length - 14;
+            const remainingEmails = plan.warmupTotalEmails - cumulative;
+
+            html += `
+                <tr>
+                    <td colspan="3" class="text-center">
+                        <em>... ${remainingDays} more days (${remainingEmails.toLocaleString()} more emails)</em>
+                    </td>
+                </tr>
+            `;
+        }
+
+        html += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="alert alert-info">
+                <p><strong>How it works:</strong></p>
+                <ul>
+                    <li>Each contact receives exactly 1 email</li>
+                    <li>System calculates daily volume: <code>${totalContacts} ÷ ${durationDays} = ${plan.idealDailyVolume} emails/day</code></li>
+                    <li>Warmup progression: ${warmupTypeDescription}</li>
+                    <li>Campaign completes when all ${totalContacts.toLocaleString()} contacts have been emailed</li>
+                </ul>
+            </div>
+        `;
+
+        const planContent = document.getElementById('warmup-plan-content');
+        if (planContent) {
+            planContent.innerHTML = html;
+
+            if (typeof jQuery !== 'undefined') {
+                jQuery('#warmup-plan-modal').modal('show');
+            }
+        }
+    }
+
+    // ==========================================
+    // FORM VALIDATION
+    // ==========================================
+
+    function setupFormValidation() {
+        const form = document.getElementById('campaign-form');
+        if (form) {
+            form.addEventListener('submit', function (e) {
+                // Final validation before submit
+                if (!validateStep(config.currentStep)) {
+                    e.preventDefault();
+                    return;
+                }
+
+                const submitBtn = this.querySelector('button[type="submit"]:not([style*="display: none"])');
+                if (submitBtn) {
+                    const originalText = submitBtn.innerHTML;
+                    submitBtn.innerHTML = 'Processing...';
+                    submitBtn.disabled = true;
+
+                    setTimeout(() => {
+                        submitBtn.innerHTML = originalText;
+                        submitBtn.disabled = false;
+                    }, 5000);
+                }
+            });
+        }
+    }
+
+    // ==========================================
+    // UPDATE SUMMARY
+    // ==========================================
+
+    function updateSummary() {
+        const campaignName = document.getElementById('campaign_form_campaignName')?.value || '--';
+        const domainSelect = document.getElementById('campaign_form_domain');
+        const domain = domainSelect?.options[domainSelect.selectedIndex]?.text || '--';
+        const startDate = document.getElementById('campaign_form_startDate')?.value || '--';
+        const durationDays = parseInt(document.getElementById('campaign_form_durationDays')?.value) || 0;
+
+        const summaryName = document.getElementById('summary-name');
+        const summaryDomain = document.getElementById('summary-domain');
+        const summaryStartDate = document.getElementById('summary-start-date');
+        const summaryDuration = document.getElementById('summary-duration');
+        const summaryContacts = document.getElementById('summary-contacts');
+
+        if (summaryName) summaryName.textContent = campaignName;
+        if (summaryDomain) summaryDomain.textContent = domain;
+        if (summaryStartDate && startDate !== '--') {
+            const date = new Date(startDate);
+            summaryStartDate.textContent = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        if (summaryDuration) summaryDuration.textContent = durationDays + ' days';
+        if (summaryContacts) summaryContacts.textContent = config.contactsCount.toLocaleString();
+
+        // Recalculate for summary
+        calculateCampaignPlan();
+    }
+
+    // ==========================================
+    // INITIALIZE ON DOM READY
+    // ==========================================
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // DEBUG: Check that token is present
+        const token = document.getElementById('csrf-token')?.value;
+        console.log('CSRF Token for sendTestEmail:', token ? 'Found (' + token.substring(0, 10) + '...)' : 'NOT FOUND!');
+
+        // Attach event for send test email
+        const sendTestEmailBtn = document.getElementById('send-test-email-btn');
+        if (sendTestEmailBtn) {
+            sendTestEmailBtn.addEventListener('click', sendTestEmail);
+        }
+
+        initialize();
+    });
+
+    // Export functions to window object
+    window.calculateCampaignPlan = calculateCampaignPlan;
+    window.updateContactsCounter = updateContactsCounter;
+
+})();

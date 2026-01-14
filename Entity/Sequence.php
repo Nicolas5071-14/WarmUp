@@ -185,7 +185,7 @@ class Sequence
         // sequenceOrder
         $metadata->mapField([
             'fieldName' => 'sequenceOrder',
-            'columnName' => 'sequence_order',
+            'columnName' => 'sequenceOrder',
             'type' => 'integer',
             'nullable' => false
         ]);

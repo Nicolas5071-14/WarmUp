@@ -8,6 +8,7 @@ use Doctrine\Common\Collections\Collection;
 use Symfony\Component\HttpFoundation\File\File;
 use MauticPlugin\MauticWarmUpBundle\Entity\WarmupType;
 
+
 class Campaign
 {
     const STATUS_DRAFT = 'draft';
@@ -81,6 +82,22 @@ class Campaign
 
     private $manualContacts;
 
+    private $totalSentToday = 0;
+    private $totalSent = 0;
+
+
+    private $sequenceName; // ← COLONNE MANQUANTE
+    private $sequenceOrder; // ← Pour les séquences si nécessaire
+    private $progress = 0.0; // ← Pour suivre la progression
+
+    private $lastComputedVolume = null;
+
+    private $warmupPlan = [];
+
+    private $sequenceType = 'single';
+    private ?array $emailSequences = [];
+
+
     public function __construct()
     {
         $this->createdAt = new \DateTime();
@@ -89,10 +106,43 @@ class Campaign
         $this->contacts = new ArrayCollection();
     }
 
+    public function getWarmupPlan(): array
+    {
+        return $this->warmupPlan ?: [];
+    }
+
+    public function setWarmupPlan(array $warmupPlan): self
+    {
+        $this->warmupPlan = $warmupPlan;
+        return $this;
+    }
     public function getManualContacts(): ?string
     {
         return $this->manualContacts;
     }
+
+    public function getSequenceType(): string
+    {
+        return $this->sequenceType;
+    }
+
+    public function setSequenceType(string $sequenceType): self
+    {
+        $this->sequenceType = $sequenceType;
+        return $this;
+    }
+
+    public function setEmailSequences(?array $emailSequences): self
+    {
+        $this->emailSequences = $emailSequences ?? [];
+        return $this;
+    }
+
+    public function getEmailSequences(): array
+    {
+        return $this->emailSequences ?? [];
+    }
+
 
 
     public function setManualContacts(?string $manualContacts): self
@@ -150,6 +200,14 @@ class Campaign
             'nullable' => false
         ]);
 
+        // last_computed_volume (pour warmup progressif α)
+        $metadata->mapField([
+            'fieldName' => 'lastComputedVolume',
+            'columnName' => 'last_computed_volume',
+            'type' => 'integer',
+            'nullable' => true
+        ]);
+
         // description
         $metadata->mapField([
             'fieldName' => 'description',
@@ -157,6 +215,41 @@ class Campaign
             'type' => 'text',
             'nullable' => true
         ]);
+
+        $metadata->mapField([
+            'fieldName' => 'totalSentToday',
+            'columnName' => 'total_sent_today',  // Colonne dans la base
+            'type' => 'integer',
+            'nullable' => false,
+            'options' => ['default' => 0]
+        ]);
+
+        // totalSent
+        $metadata->mapField([
+            'fieldName' => 'totalSent',
+            'columnName' => 'total_sent',  // Colonne dans la base
+            'type' => 'integer',
+            'nullable' => false,
+            'options' => ['default' => 0]
+        ]);
+
+        $metadata->mapField([
+            'fieldName' => 'sequenceType',
+            'columnName' => 'sequence_type',
+            'type' => 'string',
+            'length' => 20,
+            'nullable' => false,
+            'options' => ['default' => 'single']
+        ]);
+
+        // emailSequences
+        $metadata->mapField([
+            'fieldName' => 'emailSequences',
+            'columnName' => 'email_sequences',
+            'type' => 'json',
+            'nullable' => true
+        ]);
+
 
         // status
         $metadata->mapField([
@@ -184,6 +277,18 @@ class Campaign
             'type' => 'integer',
             'nullable' => false,
             'options' => ['default' => 0]
+        ]);
+
+        // warmupPlan (JSON array pour stocker le plan jour par jour)
+        $metadata->mapField([
+            'fieldName' => 'warmupPlan',
+            'columnName' => 'warmup_plan',
+            'type' => 'json',
+            'nullable' => true,
+            'options' => [
+                'default' => '[]',
+                'comment' => 'JSON array of daily warmup volumes'
+            ]
         ]);
 
         // emailsDelivered
@@ -508,6 +613,33 @@ class Campaign
             'orderBy' => ['sequenceOrder' => 'ASC']
         ]);
 
+        // sequence_name - COLONNE MANQUANTE
+        $metadata->mapField([
+            'fieldName' => 'sequenceName',
+            'columnName' => 'sequence_name',
+            'type' => 'string',
+            'length' => 255,
+            'nullable' => true
+        ]);
+
+        // sequence_order (optionnel - si vous en avez besoin)
+        $metadata->mapField([
+            'fieldName' => 'sequenceOrder',
+            'columnName' => 'sequence_order',
+            'type' => 'integer',
+            'nullable' => true,
+            'options' => ['default' => 0]
+        ]);
+
+        // progress (pour suivre la progression en pourcentage)
+        $metadata->mapField([
+            'fieldName' => 'progress',
+            'columnName' => 'progress',
+            'type' => 'float',
+            'nullable' => false,
+            'options' => ['default' => 0]
+        ]);
+
         // Contacts (OneToMany)
         $metadata->mapOneToMany([
             'fieldName' => 'contacts',
@@ -522,9 +654,51 @@ class Campaign
      *
      * @param ORM\ClassMetadata $metadata
      */
+
+
+
     public static function loadLifecycleCallbacks(ORM\ClassMetadata $metadata): void
     {
         $metadata->addLifecycleCallback('preUpdate', 'preUpdate');
+    }
+
+    public function getSequenceName(): ?string
+    {
+        return $this->sequenceName;
+    }
+
+    public function getLastComputedVolume(): ?int
+    {
+        return $this->lastComputedVolume;
+    }
+
+    public function setLastComputedVolume(?int $lastComputedVolume): self
+    {
+        $this->lastComputedVolume = $lastComputedVolume;
+        return $this;
+    }
+    public function setSequenceName(?string $sequenceName): self
+    {
+        $this->sequenceName = $sequenceName;
+        return $this;
+    }
+
+    public function getSequenceOrder(): int
+    {
+        return $this->sequenceOrder ?? 0;
+    }
+
+    public function setSequenceOrder(int $sequenceOrder): self
+    {
+        $this->sequenceOrder = $sequenceOrder;
+        return $this;
+    }
+
+    // Le getter progress existe déjà (getProgress()) mais vous pouvez ajouter un setter
+    public function setProgress(float $progress): self
+    {
+        $this->progress = $progress;
+        return $this;
     }
 
     public function preUpdate(): void
@@ -537,11 +711,49 @@ class Campaign
             $this->openRate = ($this->emailsOpened / $this->emailsSent) * 100;
             $this->clickRate = ($this->emailsClicked / $this->emailsSent) * 100;
             $this->bounceRate = ($this->emailsBounced / $this->emailsSent) * 100;
+
+            // Mettre à jour la progression
+            $this->progress = $this->getProgress();
         }
     }
-
     // Getters and Setters...
 
+
+
+    public function getTotalSentToday(): int
+    {
+        return $this->totalSentToday ?? 0;
+    }
+
+    public function setTotalSentToday(int $totalSentToday): self
+    {
+        $this->totalSentToday = $totalSentToday;
+        return $this;
+    }
+
+    public function getTotalSent(): int
+    {
+        return $this->totalSent ?? 0;
+    }
+
+    public function setTotalSent(int $totalSent): self
+    {
+        $this->totalSent = $totalSent;
+        return $this;
+    }
+
+    // Optionnel : méthodes d'incrémentation
+    public function incrementTotalSentToday(int $count = 1): self
+    {
+        $this->totalSentToday += $count;
+        return $this;
+    }
+
+    public function incrementTotalSent(int $count = 1): self
+    {
+        $this->totalSent += $count;
+        return $this;
+    }
 
     public function getEndDate(): ?\DateTimeInterface
     {
@@ -1140,34 +1352,41 @@ class Campaign
     /**
      * Get campaign progress percentage
      */
+    /**
+     * Get campaign progress percentage
+     */
     public function getProgress(): float
     {
-        if ($this->totalContacts === 0 || count($this->sequences) === 0) {
+        // If progress is already calculated, use it
+        if ($this->progress > 0) {
+            return $this->progress;
+        }
+
+        // Calculate dynamically: emails sent (contacts processed) / total contacts
+        $totalContacts = $this->getTotalContacts();
+        $emailsSent = $this->getEmailsSent();
+
+        if ($totalContacts === 0) {
             return 0;
         }
 
-        $totalPossibleEmails = $this->totalContacts * count($this->sequences);
-        if ($totalPossibleEmails === 0) {
-            return 0;
-        }
+        $progress = ($emailsSent / $totalContacts) * 100;
+        $calculatedProgress = min(100, round($progress, 2));
 
-        $progress = ($this->emailsSent / $totalPossibleEmails) * 100;
+        // Store the calculation for later
+        $this->progress = $calculatedProgress;
 
-        return min(100, round($progress, 2));
+        return $calculatedProgress;
     }
-
     /**
      * Get remaining emails to send
      */
     public function getRemainingEmails(): int
     {
-        if ($this->totalContacts === 0 || count($this->sequences) === 0) {
-            return 0;
-        }
+        $totalContacts = $this->getTotalContacts();
+        $emailsSent = $this->getEmailsSent();
 
-        $totalPossibleEmails = $this->totalContacts * count($this->sequences);
-
-        return max(0, $totalPossibleEmails - $this->emailsSent);
+        return max(0, $totalContacts - $emailsSent);
     }
 
     /**
@@ -1179,69 +1398,117 @@ class Campaign
             return null;
         }
 
-        $sentPerDay = $this->dailyLimit ?: 100;
-        $remainingEmails = $this->getRemainingEmails();
+        $remainingContacts = $this->getRemainingEmails();
+        $durationDays = $this->getDurationDays();
+        $totalContacts = $this->getTotalContacts();
 
-        if ($sentPerDay <= 0) {
+        if ($durationDays <= 0 || $totalContacts <= 0) {
             return null;
         }
 
-        $daysRemaining = ceil($remainingEmails / $sentPerDay);
+        // Calculate ideal daily volume (contacts per day)
+        $idealDailyVolume = ceil($totalContacts / $durationDays);
+
+        if ($idealDailyVolume <= 0) {
+            return null;
+        }
+
+        $daysRemaining = ceil($remainingContacts / $idealDailyVolume);
         $completionDate = clone $this->startDate;
-        $completionDate->modify('+' . $daysRemaining . ' days');
+        $completionDate->modify("+{$daysRemaining} days");
 
         return $completionDate;
     }
+
+    public function getCurrentDailyAverage(): float
+    {
+        if (!$this->startDate) {
+            return 0;
+        }
+
+        $now = new \DateTime();
+        $interval = $this->startDate->diff($now);
+        $daysElapsed = max(1, (int) $interval->format('%a'));
+
+        return round($this->emailsSent / $daysElapsed, 1);
+    }
+
+    public function getDaysRemaining(): int
+    {
+        $remainingContacts = $this->getRemainingEmails();
+        $averageDaily = $this->getCurrentDailyAverage();
+
+        if ($averageDaily <= 0) {
+            return 0;
+        }
+
+        return (int) ceil($remainingContacts / $averageDaily);
+    }
+
+
+    /**
+     * Get estimated completion date
+     */
+
 
     /**
      * Get campaign statistics as array
      */
     public function getStatistics(): array
     {
+        $totalContacts = $this->totalContacts;
+        $emailsSent = $this->emailsSent;
+        $durationDays = $this->getDurationDays();
+
         return [
-            'total_contacts' => $this->totalContacts,
-            'emails_sent' => $this->emailsSent,
-            'emails_delivered' => $this->emailsDelivered,
-            'emails_opened' => $this->emailsOpened,
-            'emails_clicked' => $this->emailsClicked,
-            'emails_bounced' => $this->emailsBounced,
+            'total_contacts' => $totalContacts,
+            'emails_sent' => $emailsSent,
+            'contacts_processed' => $emailsSent, // 1 email = 1 contact processed
+            'contacts_remaining' => max(0, $totalContacts - $emailsSent),
+            'progress_percentage' => $this->getProgress(),
+
+            // Planning metrics
+            'duration_days' => $durationDays,
+            'ideal_daily_volume' => $durationDays > 0 ? ceil($totalContacts / $durationDays) : 0,
+            'current_daily_average' => $this->getCurrentDailyAverage(),
+            'estimated_completion_date' => $this->getEstimatedCompletionDate() ?
+                $this->getEstimatedCompletionDate()->format('Y-m-d H:i:s') : null,
+            'days_remaining' => $this->getDaysRemaining(),
+
+            // Performance metrics
             'delivery_rate' => $this->deliveryRate,
             'open_rate' => $this->openRate,
             'click_rate' => $this->clickRate,
             'bounce_rate' => $this->bounceRate,
-            'progress' => $this->getProgress(),
-            'remaining_emails' => $this->getRemainingEmails(),
-            'sequences_count' => count($this->sequences),
-            'estimated_completion' => $this->getEstimatedCompletionDate() ?
-                $this->getEstimatedCompletionDate()->format('Y-m-d H:i:s') : null,
+
+            // Campaign info
             'status' => $this->status,
-            'status_label' => $this->getStatusLabel(),
             'has_started' => $this->hasStarted(),
             'can_send' => $this->canSend(),
-            // Ajoutez ces propriétés
-            'endDate' => $this->endDate ? $this->endDate->format('Y-m-d H:i:s') : null,
-            'startTime' => $this->startTime ? $this->startTime->format('H:i:s') : null,
-            'endTime' => $this->endTime ? $this->endTime->format('H:i:s') : null,
-            'sendTime' => $this->sendTime ? $this->sendTime->format('H:i:s') : null,
-            'sendFrequency' => $this->sendFrequency,
-            'startVolume' => $this->startVolume,
-            'durationDays' => $this->durationDays,
-            'maxContacts' => $this->maxContacts,
-            'duplicateHandling' => $this->duplicateHandling,
-            'syncType' => $this->syncType,
-            'contactSource' => $this->contactSource,
-            'enableWeekends' => $this->enableWeekends,
-            'enableRandomization' => $this->enableRandomization,
-            'dailyIncrement' => $this->dailyIncrement,
-            'subjectTemplate' => $this->subjectTemplate,
-            'customMessage' => $this->customMessage,
-            'segmentId' => $this->segmentId,
-            'template' => $this->template ? [
-                'id' => $this->template->getId(),
-                'name' => $this->template->getName(),
-            ] : null,
         ];
     }
+
+    /**
+     * Get campaign name (alias for getCampaignName for compatibility)
+     */
+    public function getName(): ?string
+    {
+        return $this->campaignName;
+    }
+
+    /**
+     * Set campaign name (alias for setCampaignName for compatibility)
+     */
+    public function setName(string $name): self
+    {
+        $this->campaignName = $name;
+        return $this;
+    }
+
+    /**
+     * Get remaining emails
+     */
+
 
     /**
      * Get status label for display

@@ -4,6 +4,7 @@ namespace MauticPlugin\MauticWarmUpBundle\Model;
 
 use Doctrine\ORM\EntityManagerInterface;
 use MauticPlugin\MauticWarmUpBundle\Entity\Contact;
+use MauticPlugin\MauticWarmUpBundle\Entity\Campaign;
 
 class ContactModel
 {
@@ -64,6 +65,8 @@ class ContactModel
      */
     public function unsubscribeContact(Contact $contact): void
     {
+        $contact->setUnsubscribed(true);
+        $contact->setUnsubscribedDate(new \DateTime());
         $contact->setIsActive(false);
         $this->saveEntity($contact);
     }
@@ -73,7 +76,6 @@ class ContactModel
      */
     public function getContactHistory(Contact $contact): array
     {
-        // Assurez-vous que l'entité SentLog existe dans votre bundle
         try {
             $qb = $this->em->createQueryBuilder();
 
@@ -86,7 +88,6 @@ class ContactModel
 
             return $qb->getQuery()->getResult();
         } catch (\Exception $e) {
-            // Retourner un tableau vide si l'entité n'existe pas encore
             return [];
         }
     }
@@ -97,14 +98,22 @@ class ContactModel
     public function getContactStats(Contact $contact): array
     {
         return [
-            'sent_count' => $contact->getSentCount(),
+            'emails_sent' => $contact->getEmailsSent(),
+            'emails_opened' => $contact->getEmailsOpened(),
+            'emails_clicked' => $contact->getEmailsClicked(),
             'is_active' => $contact->isActive(),
+            'is_published' => $contact->isPublished(),
+            'unsubscribed' => $contact->isUnsubscribed(),
             'campaign' => $contact->getCampaign() ? [
                 'id' => $contact->getCampaign()->getId(),
                 'name' => $contact->getCampaign()->getCampaignName(),
             ] : null,
-            'last_sent' => $contact->getLastSent(),
+            'last_sent_date' => $contact->getLastSentDate(),
+            'last_opened_date' => $contact->getLastOpenedDate(),
+            'last_clicked_date' => $contact->getLastClickedDate(),
             'next_send_date' => $contact->getNextSendDate(),
+            'sequence_day' => $contact->getSequenceDay(),
+            'days_between_emails' => $contact->getDaysBetweenEmails(),
         ];
     }
 
@@ -135,23 +144,33 @@ class ContactModel
             'First Name',
             'Last Name',
             'Campaign',
-            'Sent Count',
+            'Status',
+            'Emails Sent',
+            'Emails Opened',
+            'Emails Clicked',
             'Active',
+            'Unsubscribed',
             'Last Sent',
-            'Next Send Date'
+            'Next Send Date',
+            'Date Added'
         ]);
 
         // Write data
         foreach ($contacts as $contact) {
             fputcsv($output, [
-                $contact->getEmailAddress(),
+                $contact->getEmail(),
                 $contact->getFirstName(),
                 $contact->getLastName(),
                 $contact->getCampaign() ? $contact->getCampaign()->getCampaignName() : '',
-                $contact->getSentCount(),
+                $contact->getStatus(),
+                $contact->getEmailsSent(),
+                $contact->getEmailsOpened(),
+                $contact->getEmailsClicked(),
                 $contact->isActive() ? 'Yes' : 'No',
-                $contact->getLastSent() ? $contact->getLastSent()->format('Y-m-d H:i:s') : '',
+                $contact->isUnsubscribed() ? 'Yes' : 'No',
+                $contact->getLastSentDate() ? $contact->getLastSentDate()->format('Y-m-d H:i:s') : '',
                 $contact->getNextSendDate() ? $contact->getNextSendDate()->format('Y-m-d H:i:s') : '',
+                $contact->getDateAdded() ? $contact->getDateAdded()->format('Y-m-d H:i:s') : '',
             ]);
         }
 
@@ -171,18 +190,30 @@ class ContactModel
 
         foreach ($contacts as $contact) {
             $data[] = [
-                'email' => $contact->getEmailAddress(),
+                'id' => $contact->getId(),
+                'email' => $contact->getEmail(),
                 'first_name' => $contact->getFirstName(),
                 'last_name' => $contact->getLastName(),
                 'campaign' => $contact->getCampaign() ? [
                     'id' => $contact->getCampaign()->getId(),
                     'name' => $contact->getCampaign()->getCampaignName(),
                 ] : null,
-                'sent_count' => $contact->getSentCount(),
+                'status' => $contact->getStatus(),
+                'emails_sent' => $contact->getEmailsSent(),
+                'emails_opened' => $contact->getEmailsOpened(),
+                'emails_clicked' => $contact->getEmailsClicked(),
                 'is_active' => $contact->isActive(),
-                'last_sent' => $contact->getLastSent() ? $contact->getLastSent()->format('Y-m-d H:i:s') : null,
+                'is_published' => $contact->isPublished(),
+                'unsubscribed' => $contact->isUnsubscribed(),
+                'last_sent_date' => $contact->getLastSentDate() ? $contact->getLastSentDate()->format('Y-m-d H:i:s') : null,
+                'last_opened_date' => $contact->getLastOpenedDate() ? $contact->getLastOpenedDate()->format('Y-m-d H:i:s') : null,
+                'last_clicked_date' => $contact->getLastClickedDate() ? $contact->getLastClickedDate()->format('Y-m-d H:i:s') : null,
                 'next_send_date' => $contact->getNextSendDate() ? $contact->getNextSendDate()->format('Y-m-d H:i:s') : null,
+                'sequence_day' => $contact->getSequenceDay(),
+                'days_between_emails' => $contact->getDaysBetweenEmails(),
                 'unsubscribe_token' => $contact->getUnsubscribeToken(),
+                'date_added' => $contact->getDateAdded() ? $contact->getDateAdded()->format('Y-m-d H:i:s') : null,
+                'date_modified' => $contact->getDateModified() ? $contact->getDateModified()->format('Y-m-d H:i:s') : null,
             ];
         }
 
@@ -236,6 +267,38 @@ class ContactModel
     }
 
     /**
+     * Batch publish contacts
+     */
+    public function batchPublish(array $ids): int
+    {
+        $qb = $this->em->createQueryBuilder();
+
+        $qb->update('MauticWarmUpBundle:Contact', 'c')
+            ->set('c.isPublished', ':published')
+            ->where($qb->expr()->in('c.id', ':ids'))
+            ->setParameter('published', true)
+            ->setParameter('ids', $ids);
+
+        return $qb->getQuery()->execute();
+    }
+
+    /**
+     * Batch unpublish contacts
+     */
+    public function batchUnpublish(array $ids): int
+    {
+        $qb = $this->em->createQueryBuilder();
+
+        $qb->update('MauticWarmUpBundle:Contact', 'c')
+            ->set('c.isPublished', ':published')
+            ->where($qb->expr()->in('c.id', ':ids'))
+            ->setParameter('published', false)
+            ->setParameter('ids', $ids);
+
+        return $qb->getQuery()->execute();
+    }
+
+    /**
      * Get entities as array (for forms and API)
      */
     public function getEntities(array $args = []): array
@@ -253,7 +316,7 @@ class ContactModel
         }
         if (isset($args['filter']) && !empty($args['filter'])) {
             $qb->andWhere($qb->expr()->orX(
-                $qb->expr()->like('c.emailAddress', ':filter'),
+                $qb->expr()->like('c.email', ':filter'),
                 $qb->expr()->like('c.firstName', ':filter'),
                 $qb->expr()->like('c.lastName', ':filter')
             ))
@@ -267,31 +330,20 @@ class ContactModel
             $qb->andWhere('c.isActive = :isActive')
                 ->setParameter('isActive', $args['isActive']);
         }
-
-        $entities = $qb->getQuery()->getResult();
-
-        $result = [];
-        foreach ($entities as $contact) {
-            $result[] = [
-                'id' => $contact->getId(),
-                'emailAddress' => $contact->getEmailAddress(),
-                'firstName' => $contact->getFirstName(),
-                'lastName' => $contact->getLastName(),
-                'campaign' => $contact->getCampaign() ? [
-                    'id' => $contact->getCampaign()->getId(),
-                    'name' => $contact->getCampaign()->getCampaignName(),
-                ] : null,
-                'sentCount' => $contact->getSentCount(),
-                'isActive' => $contact->isActive(),
-                'lastSent' => $contact->getLastSent(),
-                'nextSendDate' => $contact->getNextSendDate(),
-                'unsubscribeToken' => $contact->getUnsubscribeToken(),
-                'createdAt' => $contact->getCreatedAt(),
-                'updatedAt' => $contact->getUpdatedAt(),
-            ];
+        if (isset($args['isPublished'])) {
+            $qb->andWhere('c.isPublished = :isPublished')
+                ->setParameter('isPublished', $args['isPublished']);
+        }
+        if (isset($args['status'])) {
+            $qb->andWhere('c.status = :status')
+                ->setParameter('status', $args['status']);
+        }
+        if (isset($args['unsubscribed'])) {
+            $qb->andWhere('c.unsubscribed = :unsubscribed')
+                ->setParameter('unsubscribed', $args['unsubscribed']);
         }
 
-        return $result;
+        return $qb->getQuery()->getResult();
     }
 
     /**
@@ -326,61 +378,158 @@ class ContactModel
      */
     public function getContactsByCampaign(int $campaignId): array
     {
+        $campaign = $this->em->getRepository(Campaign::class)->find($campaignId);
+        if (!$campaign) {
+            return [];
+        }
+
         return $this->em->getRepository(Contact::class)->findBy(
-            ['campaign' => $campaignId],
-            ['emailAddress' => 'ASC']
+            ['campaign' => $campaign],
+            ['email' => 'ASC']
         );
     }
 
     /**
      * Import contacts from array
      */
-    public function importContacts(array $contactsData, int $campaignId = null): int
+    public function importContacts(array $contactsData, int $campaignId = null): array
     {
-        $imported = 0;
+        $results = [
+            'imported' => 0,
+            'updated' => 0,
+            'failed' => 0,
+            'errors' => []
+        ];
 
-        foreach ($contactsData as $contactData) {
+        $campaign = null;
+        if ($campaignId) {
+            $campaign = $this->em->getRepository(Campaign::class)->find($campaignId);
+        }
+
+        foreach ($contactsData as $index => $contactData) {
             $email = $contactData['email'] ?? null;
 
             if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $results['failed']++;
+                $results['errors'][] = "Ligne " . ($index + 1) . ": Email invalide - " . $email;
                 continue;
             }
 
             // Check if contact already exists
-            $existing = $this->em->getRepository(Contact::class)->findOneBy(['emailAddress' => $email]);
+            $existing = $this->em->getRepository(Contact::class)->findOneBy(['email' => $email]);
 
-            if ($existing) {
-                // Update existing contact
-                if (isset($contactData['first_name'])) {
-                    $existing->setFirstName($contactData['first_name']);
+            try {
+                if ($existing) {
+                    // Update existing contact
+                    if (isset($contactData['first_name'])) {
+                        $existing->setFirstName($contactData['first_name']);
+                    }
+                    if (isset($contactData['last_name'])) {
+                        $existing->setLastName($contactData['last_name']);
+                    }
+                    if ($campaign) {
+                        $existing->setCampaign($campaign);
+                    }
+                    if (isset($contactData['sequence_day'])) {
+                        $existing->setSequenceDay((int) $contactData['sequence_day']);
+                    }
+                    if (isset($contactData['days_between_emails'])) {
+                        $existing->setDaysBetweenEmails((int) $contactData['days_between_emails']);
+                    }
+                    $existing->setIsActive(true);
+                    $existing->setIsPublished(true);
+                    $this->em->persist($existing);
+                    $results['updated']++;
+                } else {
+                    // Create new contact
+                    $contact = new Contact();
+                    $contact->setEmail($email);
+                    $contact->setFirstName($contactData['first_name'] ?? '');
+                    $contact->setLastName($contactData['last_name'] ?? '');
+                    if ($campaign) {
+                        $contact->setCampaign($campaign);
+                    }
+                    if (isset($contactData['sequence_day'])) {
+                        $contact->setSequenceDay((int) $contactData['sequence_day']);
+                    }
+                    if (isset($contactData['days_between_emails'])) {
+                        $contact->setDaysBetweenEmails((int) $contactData['days_between_emails']);
+                    }
+                    $contact->setIsActive(true);
+                    $contact->setIsPublished(true);
+                    $contact->setUnsubscribeToken(bin2hex(random_bytes(32)));
+                    $this->em->persist($contact);
+                    $results['imported']++;
                 }
-                if (isset($contactData['last_name'])) {
-                    $existing->setLastName($contactData['last_name']);
-                }
-                if ($campaignId) {
-                    // Note: Vous devrez récupérer l'entité Campaign par son ID ici
-                }
-                $existing->setIsActive(true);
-                $this->em->persist($existing);
-            } else {
-                // Create new contact
-                $contact = new Contact();
-                $contact->setEmailAddress($email);
-                $contact->setFirstName($contactData['first_name'] ?? '');
-                $contact->setLastName($contactData['last_name'] ?? '');
-                $contact->setIsActive(true);
-                if ($campaignId) {
-                    // Note: Vous devrez récupérer l'entité Campaign par son ID ici
-                }
-                $contact->setUnsubscribeToken(bin2hex(random_bytes(32)));
-                $this->em->persist($contact);
+            } catch (\Exception $e) {
+                $results['failed']++;
+                $results['errors'][] = "Ligne " . ($index + 1) . ": " . $e->getMessage();
             }
-
-            $imported++;
         }
 
         $this->em->flush();
 
-        return $imported;
+        return $results;
+    }
+
+    /**
+     * Get contacts ready for sending
+     */
+    public function getContactsReadyForSending(int $campaignId = null, int $limit = 100): array
+    {
+        $qb = $this->em->createQueryBuilder()
+            ->select('c')
+            ->from(Contact::class, 'c')
+            ->where('c.isActive = true')
+            ->andWhere('c.isPublished = true')
+            ->andWhere('c.unsubscribed = false')
+            ->andWhere('(c.nextSendDate IS NULL OR c.nextSendDate <= :now)')
+            ->andWhere('(c.status = :pending OR c.status = :scheduled)')
+            ->setParameter('now', new \DateTime())
+            ->setParameter('pending', 'pending')
+            ->setParameter('scheduled', 'scheduled')
+            ->orderBy('c.nextSendDate', 'ASC')
+            ->setMaxResults($limit);
+
+        if ($campaignId) {
+            $campaign = $this->em->getRepository(Campaign::class)->find($campaignId);
+            if ($campaign) {
+                $qb->andWhere('c.campaign = :campaign')
+                    ->setParameter('campaign', $campaign);
+            }
+        }
+
+        return $qb->getQuery()->getResult();
+    }
+
+    /**
+     * Update contact status
+     */
+    public function updateContactStatus(int $contactId, string $status): bool
+    {
+        try {
+            $contact = $this->getEntity($contactId);
+            if (!$contact) {
+                return false;
+            }
+
+            $contact->setStatus($status);
+            $this->saveEntity($contact);
+            return true;
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Reset contact sequence
+     */
+    public function resetContactSequence(Contact $contact): void
+    {
+        $contact->setSequenceDay(1);
+        $contact->setNextSendDate(null);
+        $contact->setLastSentDate(null);
+        $contact->setStatus('pending');
+        $this->saveEntity($contact);
     }
 }
