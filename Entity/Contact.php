@@ -22,7 +22,7 @@ class Contact
 
     /**
      * @var Campaign
-     * @ORM\ManyToOne(targetEntity="Campaign", inversedBy="contacts")
+     * @ORM\ManyToOne(targetEntity="Campaign", inversedBy="contacts", cascade: ["persist"])
      * @ORM\JoinColumn(name="campaign_id", referencedColumnName="id", onDelete="CASCADE")
      */
     private $campaign;
@@ -680,10 +680,13 @@ class Contact
             ->addIndex(['unsubscribed'], 'unsubscribed_idx');
 
         // ID
+        // ID
         $builder->addId();
 
-        // Campaign relation
+        // Campaign relation - AJOUTEZ CASCADE PERSIST ICI
         $builder->createManyToOne('campaign', Campaign::class)
+            ->inversedBy('contacts')
+            ->cascade(['persist'])  // <-- IMPORTANT
             ->addJoinColumn('campaign_id', 'id', true, false, 'CASCADE')
             ->build();
 

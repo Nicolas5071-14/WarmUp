@@ -838,14 +838,39 @@ class CampaignController
             $sequenceType = $form->get('sequenceType')->getData() ?? 'single';
             $campaign->setSequenceType($sequenceType);
 
+
             if ($sequenceType === 'multiple') {
-                $emailSequencesJson = $form->get('emailSequences')->getData();
-                if ($emailSequencesJson && $emailSequencesJson !== '[]') {
-                    $emailSequences = json_decode($emailSequencesJson, true);
-                    if (is_array($emailSequences) && !empty($emailSequences)) {
-                        $campaign->setEmailSequences($emailSequences);
-                        error_log('Saved ' . count($emailSequences) . ' email sequences');
+                $emailSequencesData = $form->get('emailSequences')->getData();
+
+                error_log('Email sequences data type: ' . gettype($emailSequencesData));
+                error_log('Email sequences data: ' . print_r($emailSequencesData, true));
+
+                $emailSequences = [];
+
+                // Gérer le cas où c'est une chaîne JSON
+                if (is_string($emailSequencesData)) {
+                    if ($emailSequencesData && $emailSequencesData !== '[]') {
+                        try {
+                            $decoded = json_decode($emailSequencesData, true);
+                            if (is_array($decoded)) {
+                                $emailSequences = $decoded;
+                            }
+                        } catch (\Exception $e) {
+                            error_log('Error decoding emailSequences JSON: ' . $e->getMessage());
+                        }
                     }
+                }
+                // Gérer le cas où c'est déjà un tableau
+                elseif (is_array($emailSequencesData)) {
+                    $emailSequences = $emailSequencesData;
+                }
+
+                if (!empty($emailSequences)) {
+                    $campaign->setEmailSequences($emailSequences);
+                    error_log('Saved ' . count($emailSequences) . ' email sequences');
+                } else {
+                    error_log('No email sequences found');
+                    $campaign->setEmailSequences([]);
                 }
             } else {
                 // Mode single
@@ -861,6 +886,10 @@ class CampaignController
                         ]
                     ]);
                     error_log('Saved single email as sequence');
+                } else {
+                    // Toujours définir un tableau vide si pas de contenu
+                    $campaign->setEmailSequences([]);
+                    error_log('No email content for single mode, setting empty sequences');
                 }
             }
 
@@ -886,9 +915,9 @@ class CampaignController
 
             error_log('Success message: ' . $successMessage);
 
-            $this->getSession()->getFlashBag()->add('success', $successMessage);
+            $this->getSession()->getFlashBag()->add('notice', $successMessage);
 
-            // Si c'est AJAX, retourner JSON
+            // Si c'est AJAX, dretourner JSON
             if ($request->isXmlHttpRequest()) {
                 return new JsonResponse([
                     'success' => true,
@@ -1140,8 +1169,13 @@ class CampaignController
      */
     private function saveContactsInBatch(Campaign $campaign, array $contacts): void
     {
-        $batchSize = 100; // Sauvegarder par lots de 100
+        $batchSize = 100;
         $contactCount = count($contacts);
+
+        // S'assurer que la campagne est persistée
+        if (!$this->em->contains($campaign)) {
+            $this->em->persist($campaign);
+        }
 
         for ($i = 0; $i < $contactCount; $i += $batchSize) {
             $batch = array_slice($contacts, $i, $batchSize);
@@ -1152,7 +1186,9 @@ class CampaignController
                 }
 
                 $contact = new Contact();
-                $contact->setCampaign($campaign);
+                // Utilisez la méthode addContact de Campaign qui gère la relation bidirectionnelle
+                $campaign->addContact($contact);
+
                 $contact->setEmail($contactData['email']);
                 $contact->setFirstName($contactData['first_name'] ?? '');
                 $contact->setLastName($contactData['last_name'] ?? '');
@@ -1163,16 +1199,19 @@ class CampaignController
                 $contact->setIsPublished(true);
                 $contact->setStatus('pending');
                 $contact->setDateAdded(new \DateTime());
-                $contact->setUnsubscribeToken(bin2hex(random_bytes(16))); // Réduire à 16 bytes
+                $contact->setUnsubscribeToken(bin2hex(random_bytes(16)));
 
                 $this->em->persist($contact);
             }
 
             $this->em->flush();
-            $this->em->clear(Contact::class); // Détacher les contacts pour libérer la mémoire
+            $this->em->clear(Contact::class);
 
             error_log("Saved batch " . (($i / $batchSize) + 1) . " of " . ceil($contactCount / $batchSize));
         }
+
+        // Flush final pour s'assurer que tout est sauvegardé
+        $this->em->flush();
     }
 
     /**

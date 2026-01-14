@@ -65,6 +65,11 @@ class Campaign
     private $dailyLimit;
     private $warmupDuration;
     private $sequences;
+
+    /**
+     * @var Collection|Contact[]
+     * @ORM\OneToMany(targetEntity="Contact", mappedBy="campaign", cascade: ["persist", "remove"], orphanRemoval=true)
+     */
     private $contacts;
     private $createdAt;
     private $updatedAt;
@@ -132,9 +137,21 @@ class Campaign
         return $this;
     }
 
-    public function setEmailSequences(?array $emailSequences): self
+    public function setEmailSequences($emailSequences): self
     {
-        $this->emailSequences = $emailSequences ?? [];
+        if (is_string($emailSequences)) {
+            try {
+                $decoded = json_decode($emailSequences, true);
+                $this->emailSequences = is_array($decoded) ? $decoded : [];
+            } catch (\Exception $e) {
+                $this->emailSequences = [];
+            }
+        } elseif (is_array($emailSequences)) {
+            $this->emailSequences = $emailSequences;
+        } else {
+            $this->emailSequences = [];
+        }
+
         return $this;
     }
 

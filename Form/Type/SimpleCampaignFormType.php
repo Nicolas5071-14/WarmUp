@@ -38,28 +38,28 @@ class SimpleCampaignFormType extends AbstractType
             ])
 
             ->add('description', TextareaType::class, [
-                'label' => 'Description',
-                'required' => false,
-                'attr' => ['class' => 'form-control', 'rows' => 3]
-            ])
+                    'label' => 'Description',
+                    'required' => false,
+                    'attr' => ['class' => 'form-control', 'rows' => 3]
+                ])
 
             ->add('domain', EntityType::class, [
-                'label' => 'Sending Domain *',
-                'class' => Domain::class,
-                'choice_label' => 'domainName',
-                'required' => true,
-                'attr' => ['class' => 'form-control'],
-                'constraints' => [new NotBlank()]
-            ])
+                    'label' => 'Sending Domain *',
+                    'class' => Domain::class,
+                    'choice_label' => 'domainName',
+                    'required' => true,
+                    'attr' => ['class' => 'form-control'],
+                    'constraints' => [new NotBlank()]
+                ])
 
             ->add('warmupType', EntityType::class, [
-                'label' => 'Warmup Type *',
-                'class' => WarmupType::class,
-                'choice_label' => 'typeName',
-                'required' => true,
-                'attr' => ['class' => 'form-control'],
-                'constraints' => [new NotBlank()]
-            ])
+                    'label' => 'Warmup Type *',
+                    'class' => WarmupType::class,
+                    'choice_label' => 'typeName',
+                    'required' => true,
+                    'attr' => ['class' => 'form-control'],
+                    'constraints' => [new NotBlank()]
+                ])
 
             // Planning
             ->add('startDate', DateTimeType::class, [
@@ -71,38 +71,38 @@ class SimpleCampaignFormType extends AbstractType
             ])
 
             ->add('sendTime', TimeType::class, [
-                'label' => 'Send Time (Toronto Time) *',
-                'widget' => 'single_text',
-                'required' => true,
-                'attr' => ['class' => 'form-control'],
-                'constraints' => [new NotBlank()],
-                'data' => new \DateTime('09:00')
-            ])
+                    'label' => 'Send Time (Toronto Time) *',
+                    'widget' => 'single_text',
+                    'required' => true,
+                    'attr' => ['class' => 'form-control'],
+                    'constraints' => [new NotBlank()],
+                    'data' => new \DateTime('09:00')
+                ])
 
             ->add('endDate', DateTimeType::class, [
-                'label' => 'End Date',
-                'widget' => 'single_text',
-                'required' => false,
-                'attr' => [
-                    'class' => 'form-control end-date-field',
-                    'style' => 'display: none;'
-                ],
-                'html5' => false,
-                'format' => 'yyyy-MM-dd\'T\'HH:mm',
-                'input' => 'datetime'
-            ])
+                    'label' => 'End Date',
+                    'widget' => 'single_text',
+                    'required' => false,
+                    'attr' => [
+                        'class' => 'form-control end-date-field',
+                        'style' => 'display: none;'
+                    ],
+                    'html5' => false,
+                    'format' => 'yyyy-MM-dd\'T\'HH:mm',
+                    'input' => 'datetime'
+                ])
 
             ->add('sendFrequency', ChoiceType::class, [
-                'label' => 'Frequency',
-                'choices' => [
-                    'Daily' => 'daily',
-                    'Weekdays Only' => 'weekdays',
-                    'Weekly (Monday)' => 'weekly'
-                ],
-                'required' => true,
-                'attr' => ['class' => 'form-control'],
-                'data' => 'daily'
-            ])
+                    'label' => 'Frequency',
+                    'choices' => [
+                        'Daily' => 'daily',
+                        'Weekdays Only' => 'weekdays',
+                        'Weekly (Monday)' => 'weekly'
+                    ],
+                    'required' => true,
+                    'attr' => ['class' => 'form-control'],
+                    'data' => 'daily'
+                ])
 
             // Paramètres de warmup
             ->add('startVolume', IntegerType::class, [
@@ -114,19 +114,19 @@ class SimpleCampaignFormType extends AbstractType
             ])
 
             ->add('durationDays', IntegerType::class, [
-                'label' => 'Duration (days) *',
-                'required' => true,
-                'attr' => ['class' => 'form-control', 'min' => 1, 'max' => 180],
-                'constraints' => [new NotBlank()],
-                'data' => 30
-            ])
+                    'label' => 'Duration (days) *',
+                    'required' => true,
+                    'attr' => ['class' => 'form-control', 'min' => 1, 'max' => 180],
+                    'constraints' => [new NotBlank()],
+                    'data' => 30
+                ])
 
             ->add('dailyIncrement', IntegerType::class, [
-                'label' => 'Daily Increment (%)',
-                'required' => false,
-                'attr' => ['class' => 'form-control', 'min' => 1, 'max' => 100],
-                'data' => 10
-            ])
+                    'label' => 'Daily Increment (%)',
+                    'required' => false,
+                    'attr' => ['class' => 'form-control', 'min' => 1, 'max' => 100],
+                    'data' => 10
+                ])
 
             // Total Contacts (champ caché géré par JS)
             ->add('totalContacts', HiddenType::class, [
@@ -153,36 +153,36 @@ class SimpleCampaignFormType extends AbstractType
             ])
 
             ->add('segmentId', HiddenType::class, [
-                'label' => false,
-                'required' => false,
-                'mapped' => false,
-                'attr' => [
-                    'class' => 'form-control',
-                    'placeholder' => 'Enter segment ID'
-                ]
-            ])
+                    'label' => false,
+                    'required' => false,
+                    'mapped' => false,
+                    'attr' => [
+                        'class' => 'form-control',
+                        'placeholder' => 'Enter segment ID'
+                    ]
+                ])
 
             ->add('csvFile', FileType::class, [
-                'label' => false,
-                'required' => false,
-                'mapped' => false,
-                'attr' => [
-                    'class' => 'form-control',
-                    'accept' => '.csv'
-                ],
-                'constraints' => [
-                    new File([
-                        'maxSize' => '1M',
-                        'mimeTypes' => [
-                            'text/csv',
-                            'text/plain',
-                            'application/csv',
-                            'application/vnd.ms-excel'
-                        ],
-                        'mimeTypesMessage' => 'Please upload a valid CSV file'
-                    ])
-                ]
-            ])
+                    'label' => false,
+                    'required' => false,
+                    'mapped' => false,
+                    'attr' => [
+                        'class' => 'form-control',
+                        'accept' => '.csv'
+                    ],
+                    'constraints' => [
+                        new File([
+                            'maxSize' => '1M',
+                            'mimeTypes' => [
+                                'text/csv',
+                                'text/plain',
+                                'application/csv',
+                                'application/vnd.ms-excel'
+                            ],
+                            'mimeTypesMessage' => 'Please upload a valid CSV file'
+                        ])
+                    ]
+                ])
 
             // Email Content
             ->add('subjectTemplate', TextType::class, [
@@ -198,17 +198,17 @@ class SimpleCampaignFormType extends AbstractType
             ])
 
             ->add('customMessage', TextareaType::class, [
-                'label' => 'Email Body',
-                'required' => false,
-                'attr' => [
-                    'class' => 'form-control',
-                    'rows' => 12,
-                    'placeholder' => 'Enter your email content here...',
-                ],
-                'constraints' => [
-                    new Length(['max' => 10000]),
-                ],
-            ])
+                    'label' => 'Email Body',
+                    'required' => false,
+                    'attr' => [
+                        'class' => 'form-control',
+                        'rows' => 12,
+                        'placeholder' => 'Enter your email content here...',
+                    ],
+                    'constraints' => [
+                        new Length(['max' => 10000]),
+                    ],
+                ])
 
             // Email Sequences
             ->add('sequenceType', HiddenType::class, [
@@ -217,14 +217,14 @@ class SimpleCampaignFormType extends AbstractType
             ])
 
             ->add('emailSequences', TextareaType::class, [
-                'label' => false,
-                'required' => false,
-                'data' => '[]',
-                'attr' => [
-                    'style' => 'display: none;',
-                    'rows' => 1
-                ]
-            ])
+                    'label' => false,
+                    'required' => false,
+                    'data' => '[]',
+                    'attr' => [
+                        'style' => 'display: none;',
+                        'rows' => 1
+                    ]
+                ])
 
             // Options
             ->add('enableWeekends', CheckboxType::class, [
@@ -235,50 +235,73 @@ class SimpleCampaignFormType extends AbstractType
             ])
 
             ->add('enableRandomization', CheckboxType::class, [
-                'label' => 'Enable Randomization',
-                'required' => false,
-                'attr' => ['class' => 'form-check-input'],
-                'data' => true
-            ])
+                    'label' => 'Enable Randomization',
+                    'required' => false,
+                    'attr' => ['class' => 'form-check-input'],
+                    'data' => true
+                ])
         ;
 
         // Ajouter le transformer pour endDate
         $builder->get('endDate')
             ->addModelTransformer(new CallbackTransformer(
-                // Transforme DateTime → string pour l'affichage
-                function ($date) {
-                    if ($date instanceof \DateTimeInterface) {
-                        return $date->format('Y-m-d\TH:i');
-                    }
-                    return $date;
-                },
-                // Transforme string → DateTime pour l'entité
-                function ($dateString) {
-                    if (empty($dateString)) {
-                        return null;
-                    }
-
-                    try {
-                        // Supporte plusieurs formats
-                        if (strpos($dateString, 'T') !== false) {
-                            // Format ISO 8601: "2024-01-15T09:00"
-                            return new \DateTime($dateString);
-                        } else {
-                            // Format MySQL: "2024-01-15 09:00:00"
-                            $date = \DateTime::createFromFormat('Y-m-d H:i:s', $dateString);
-                            if (!$date) {
-                                // Essayer d'autres formats
-                                $date = new \DateTime($dateString);
-                            }
-                            return $date;
+                    // Transforme DateTime → string pour l'affichage
+                    function ($date) {
+                        if ($date instanceof \DateTimeInterface) {
+                            return $date->format('Y-m-d\TH:i');
                         }
-                    } catch (\Exception $e) {
-                        // Si le parsing échoue, retourner null
-                        error_log('Error parsing endDate: ' . $e->getMessage());
-                        return null;
+                        return $date;
+                    },
+                    // Transforme string → DateTime pour l'entité
+                    function ($dateString) {
+                        if (empty($dateString)) {
+                            return null;
+                        }
+
+                        try {
+                            // Supporte plusieurs formats
+                            if (strpos($dateString, 'T') !== false) {
+                                // Format ISO 8601: "2024-01-15T09:00"
+                                return new \DateTime($dateString);
+                            } else {
+                                // Format MySQL: "2024-01-15 09:00:00"
+                                $date = \DateTime::createFromFormat('Y-m-d H:i:s', $dateString);
+                                if (!$date) {
+                                    // Essayer d'autres formats
+                                    $date = new \DateTime($dateString);
+                                }
+                                return $date;
+                            }
+                        } catch (\Exception $e) {
+                            // Si le parsing échoue, retourner null
+                            error_log('Error parsing endDate: ' . $e->getMessage());
+                            return null;
+                        }
                     }
-                }
-            ));
+                ));
+
+        // Ajoutez le DataTransformer APRÈS tous les add()
+        $builder->get('emailSequences')
+            ->addModelTransformer(new CallbackTransformer(
+                    // Transforme array → string pour l'affichage
+                    function ($array) {
+                        if ($array === null || !is_array($array)) {
+                            return '[]';
+                        }
+                        return json_encode($array, JSON_PRETTY_PRINT);
+                    },
+                    // Transforme string → array pour l'entité
+                    function ($string) {
+                        if (empty($string) || $string === '[]') {
+                            return [];
+                        }
+                        try {
+                            return json_decode($string, true);
+                        } catch (\Exception $e) {
+                            return [];
+                        }
+                    }
+                ));
     }
 
     public function configureOptions(OptionsResolver $resolver): void
